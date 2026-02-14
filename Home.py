@@ -143,31 +143,63 @@ if csv_file is not None:
             df_clean[y_col] = df_clean[y_col].apply(clean_coord)
 
             # 2. Categorize Data
-            # A. Zero Coordinates (0,0) - Often default sensor values
+            # A. Empty/Null - Missing coordinates
+            empty_mask = df_clean[x_col].isna() | df_clean[y_col].isna()
+            
+            # B. Zero Coordinates (0,0) - Often default sensor values
             zero_mask = (df_clean[x_col] == 0) & (df_clean[y_col] == 0)
             
-            # B. Invalid Range or Non-Numeric (excluding zeros)
+            # C. Valid Range
             # Valid range: Lon -180 to 180, Lat -90 to 90
             valid_range_mask = (
                 (df_clean[x_col].between(-180, 180)) & 
                 (df_clean[y_col].between(-90, 90))
             )
-            # Valid is in range AND not zero AND not NaN
-            valid_mask = valid_range_mask & (~zero_mask) & (df_clean[x_col].notna()) & (df_clean[y_col].notna())
+            # Valid is in range AND not zero AND not empty
+            valid_mask = valid_range_mask & (~zero_mask) & (~empty_mask)
 
+            # D. Invalid - everything else (text, out of range, etc.)
             # Create DataFrames
             df_valid = df_clean[valid_mask].copy()
             df_zero = df_full[zero_mask].copy()
-            df_invalid = df_full[~(valid_mask | zero_mask)].copy()
+            df_empty = df_full[empty_mask].copy()
+            df_invalid = df_full[~(valid_mask | zero_mask | empty_mask)].copy()
+            
+            # Add diagnostic columns to invalid data
+            if not df_invalid.empty:
+                df_invalid['_validation_issue'] = ''
+                
+                # Check each invalid row for reason
+                for idx in df_invalid.index:
+                    reasons = []
+                    x_val = df_clean.loc[idx, x_col]
+                    y_val = df_clean.loc[idx, y_col]
+                    
+                    if pd.isna(x_val) or pd.isna(y_val):
+                        reasons.append("Empty/Null value")
+                    elif not isinstance(x_val, (int, float)):
+                        reasons.append(f"Cannot convert to number")
+                    elif x_val < -180 or x_val > 180:
+                        reasons.append(f"Lon out of range ({x_val})")
+                    elif y_val < -90 or y_val > 90:
+                        reasons.append(f"Lat out of range ({y_val})")
+                    
+                    df_invalid.loc[idx, '_validation_issue'] = '; '.join(reasons) if reasons else 'Unknown'
 
             # Save validation results
             st.session_state.validation_results = {
                 'df_valid': df_valid,
                 'df_invalid': df_invalid,
                 'df_zero': df_zero,
+                'df_empty': df_empty,
                 'df_raw_len': len(df_full),
                 'x_col': x_col,
-                'y_col': y_col
+                'y_col': y_col,
+                'diagnostics': {
+                    'empty_count': empty_mask.sum(),
+                    'out_of_range_lon': ((df_clean[x_col] < -180) | (df_clean[x_col] > 180)).sum(),
+                    'out_of_range_lat': ((df_clean[y_col] < -90) | (df_clean[y_col] > 90)).sum()
+                }
             }
             st.success("✅ Data validation complete!")
     
@@ -225,25 +257,28 @@ if csv_file is not None:
         df_valid = val_res['df_valid']
         df_invalid = val_res['df_invalid']
         df_zero = val_res['df_zero']
+        df_empty = val_res['df_empty']
         x_col = val_res['x_col']
         y_col = val_res['y_col']
         
         # Determine which tabs to show
         if spatial_res:
             # Show all tabs (including map and spatial analysis)
-            tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+            tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
                 "🗺️ Map", 
                 "✅ All Valid Data", 
                 "🔴 Valid but Outside", 
-                "0️⃣ Zero Coordinates", 
+                "0️⃣ Zero Coordinates",
+                "📭 Empty/Null",
                 "❌ Invalid Data", 
                 "📊 Summary"
             ])
         else:
             # Show only validation tabs (no map or spatial tabs)
-            tab2, tab4, tab5, tab6 = st.tabs([
+            tab2, tab4, tab5, tab6, tab7 = st.tabs([
                 "✅ Valid Coordinates",
-                "0️⃣ Zero Coordinates", 
+                "0️⃣ Zero Coordinates",
+                "📭 Empty/Null",
                 "❌ Invalid Data", 
                 "📊 Summary"
             ])
@@ -390,23 +425,31 @@ if csv_file is not None:
                     st.download_button("Download Zero-Coord Rows", df_zero.to_csv(index=False).encode('utf-8'), "zero_coordinate_rows.csv", "text/csv")
 
             with tab5:
+                st.info(f"Found {len(df_empty)} rows with empty/null coordinates.")
+                st.markdown("These rows have missing coordinate values (blank cells).")
+                st.dataframe(df_empty, use_container_width=True)
+                if not df_empty.empty:
+                    st.download_button("Download Empty Rows", df_empty.to_csv(index=False).encode('utf-8'), "empty_coordinates.csv", "text/csv")
+
+            with tab6:
                 st.error(f"Found {len(df_invalid)} rows with invalid coordinates.")
                 st.markdown("These rows have text errors or impossible numbers (e.g., Lat > 90).")
                 st.dataframe(df_invalid, use_container_width=True)
                 if not df_invalid.empty:
                     st.download_button("Download Invalid Rows", df_invalid.to_csv(index=False).encode('utf-8'), "invalid_rows.csv", "text/csv")
 
-            with tab6:
+            with tab7:
                 st.metric("Total Rows", val_res['df_raw_len'])
-                c1, c2, c3, c4, c5 = st.columns(5)
+                c1, c2, c3, c4, c5, c6 = st.columns(6)
                 inside_count = len(gdf_points[gdf_points['location_status'] == 'Inside'])
                 outside_count = len(gdf_points[gdf_points['location_status'] == 'Outside'])
                 
                 c1.metric("Valid Rows", len(gdf_points))
                 c2.metric("✅ Inside Polygon", inside_count)
                 c3.metric("🔴 Outside Polygon", outside_count)
-                c4.metric("Zero (0,0) Rows", len(df_zero))
-                c5.metric("Invalid Rows", len(df_invalid))
+                c4.metric("Zero (0,0)", len(df_zero))
+                c5.metric("Empty/Null", len(df_empty))
+                c6.metric("Invalid", len(df_invalid))
         
         else:
             # VALIDATION ONLY MODE: Show only data quality tabs
@@ -429,15 +472,40 @@ if csv_file is not None:
                     st.download_button("Download Zero-Coord Rows", df_zero.to_csv(index=False).encode('utf-8'), "zero_coordinate_rows.csv", "text/csv")
             
             with tab5:
+                st.info(f"Found {len(df_empty)} rows with empty/null coordinates.")
+                st.markdown("These rows have missing coordinate values (blank cells).")
+                st.dataframe(df_empty, use_container_width=True)
+                if not df_empty.empty:
+                    st.download_button("Download Empty Rows", df_empty.to_csv(index=False).encode('utf-8'), "empty_coordinates.csv", "text/csv")
+            
+            with tab6:
                 st.error(f"Found {len(df_invalid)} rows with invalid coordinates.")
-                st.markdown("These rows have text errors or impossible numbers (e.g., Lat > 90).")
+                
+                # Show diagnostic summary
+                if 'diagnostics' in val_res and not df_invalid.empty:
+                    diag = val_res['diagnostics']
+                    st.markdown("### 🔍 Why is my data invalid?")
+                    
+                    col1, col2 = st.columns(2)
+                    col1.metric("Longitude Out of Range", diag['out_of_range_lon'], help="Valid: -180 to 180")
+                    col2.metric("Latitude Out of Range", diag['out_of_range_lat'], help="Valid: -90 to 90")
+                    
+                    st.markdown("""
+                    **Common Issues:**
+                    - **Swapped columns** - Check if you selected Lat/Lon correctly (Lat should be -90 to 90, Lon -180 to 180)
+                    - **Wrong format** - UTM, DMS (degrees-minutes-seconds) not supported yet
+                    - **Text values** - Non-numeric data in coordinate columns
+                    """)
+                
+                st.markdown("---")
                 st.dataframe(df_invalid, use_container_width=True)
                 if not df_invalid.empty:
                     st.download_button("Download Invalid Rows", df_invalid.to_csv(index=False).encode('utf-8'), "invalid_rows.csv", "text/csv")
             
-            with tab6:
+            with tab7:
                 st.metric("Total Rows", val_res['df_raw_len'])
-                c1, c2, c3 = st.columns(3)
+                c1, c2, c3, c4 = st.columns(4)
                 c1.metric("✅ Valid Rows", len(df_valid))
-                c2.metric("0️⃣ Zero (0,0) Rows", len(df_zero))
-                c3.metric("❌ Invalid Rows", len(df_invalid))
+                c2.metric("0️⃣ Zero (0,0)", len(df_zero))
+                c3.metric("📭 Empty/Null", len(df_empty))
+                c4.metric("❌ Invalid", len(df_invalid))
