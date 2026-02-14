@@ -5,6 +5,7 @@ import folium
 from streamlit_folium import st_folium
 from shapely.geometry import Point
 import numpy as np
+from folium.plugins import MarkerCluster
 
 # Set page configuration
 st.set_page_config(page_title="Geo Spatial Filter", layout="wide")
@@ -16,7 +17,7 @@ col1, col2 = st.columns(2)
 with col1:
     geojson_file = st.file_uploader("1. Upload GeoJSON (Polygon)", type=['geojson', 'json'])
 with col2:
-    csv_file = st.file_uploader("2. Upload CSV (Points)", type=['csv', 'txt'])
+    csv_file = st.file_uploader("2. Upload CSV/Excel (Points)", type=['csv', 'txt', 'xlsx', 'xls'])
 
 # --- Step 1.5: CSV Delimiter Settings ---
 sep = ","
@@ -51,13 +52,45 @@ if geojson_file is not None and csv_file is not None:
         st.error(f"Error reading GeoJSON: {e}")
         st.stop()
 
-    # Load CSV
+    # Load CSV or Excel
     try:
         csv_file.seek(0)
-        df = pd.read_csv(csv_file, sep=sep, dtype=str)
+        file_extension = csv_file.name.split('.')[-1].lower()
+        
+        if file_extension in ['xlsx', 'xls']:
+            # Read Excel file
+            df = pd.read_excel(csv_file, dtype=str)
+            st.info(f"📊 Loaded Excel file: {csv_file.name}")
+        else:
+            # Read CSV/TXT file
+            df = pd.read_csv(csv_file, sep=sep, dtype=str)
+            st.info(f"📄 Loaded CSV file: {csv_file.name}")
     except Exception as e:
-        st.error(f"Error reading CSV: {e}")
+        st.error(f"Error reading file: {e}")
         st.stop()
+    
+    # --- Data Validation Preview ---
+    st.divider()
+    st.subheader("📋 Data Preview & Validation")
+    
+    with st.expander("📊 View Data Quality Summary", expanded=True):
+        col_a, col_b, col_c = st.columns(3)
+        col_a.metric("Total Rows", len(df))
+        col_b.metric("Total Columns", len(df.columns))
+        col_c.metric("File Size", f"{csv_file.size / (1024*1024):.2f} MB")
+        
+        st.write("**Column Names & Data Types:**")
+        preview_df = pd.DataFrame({
+            'Column Name': df.columns,
+            'Data Type': [str(df[col].dtype) for col in df.columns],
+            'Non-Null Count': [df[col].notna().sum() for col in df.columns],
+            'Null Count': [df[col].isna().sum() for col in df.columns],
+            'Sample Value': [str(df[col].iloc[0]) if len(df) > 0 else 'N/A' for col in df.columns]
+        })
+        st.dataframe(preview_df, use_container_width=True)
+        
+        st.write("**First 5 Rows:**")
+        st.dataframe(df.head(), use_container_width=True)
 
     # Column Selectors
     st.divider()
@@ -139,7 +172,14 @@ if geojson_file is not None and csv_file is not None:
             y_col = res['y_col']
 
             # Tabs
-            tab1, tab2, tab3, tab4 = st.tabs(["🗺️ Map & Valid", "0️⃣ Zero Coordinates", "❌ Invalid Data", "📊 Summary"])
+            tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+                "🗺️ Map", 
+                "✅ All Valid Data", 
+                "🔴 Valid but Outside", 
+                "0️⃣ Zero Coordinates", 
+                "❌ Invalid Data", 
+                "📊 Summary"
+            ])
 
             with tab1:
                 # Map Preparation
@@ -149,43 +189,145 @@ if geojson_file is not None and csv_file is not None:
                 m = folium.Map(location=[center_lat, center_lon], zoom_start=12, tiles="CartoDB positron")
                 folium.GeoJson(gdf_polygon, style_function=lambda x: {'fillColor': 'blue', 'color': 'blue', 'fillOpacity': 0.1}).add_to(m)
 
-                # Markers
-                if len(gdf_points) < 2000:
+                # Performance-optimized markers with clustering
+                num_points = len(gdf_points)
+                
+                if num_points < 500:
+                    # Small dataset: Individual markers
                     for idx, row in gdf_points.iterrows():
                         color = '#2ecc71' if row['location_status'] == 'Inside' else '#e74c3c'
                         folium.CircleMarker(
-                            location=[row[y_col], row[x_col]], radius=4, color=color, fill=True, fill_color=color, fill_opacity=0.8,
+                            location=[row[y_col], row[x_col]], 
+                            radius=4, 
+                            color=color, 
+                            fill=True, 
+                            fill_color=color, 
+                            fill_opacity=0.8,
                             popup=f"Status: {row['location_status']}"
                         ).add_to(m)
+                    st.success(f"✅ Showing {num_points} individual markers")
+                
+                elif num_points < 10000:
+                    # Medium dataset: Use MarkerCluster for better performance
+                    st.info(f"📍 Showing {num_points} points with clustering (click clusters to zoom in)")
+                    
+                    # Create separate clusters for inside/outside
+                    marker_cluster_inside = MarkerCluster(name='Inside Points').add_to(m)
+                    marker_cluster_outside = MarkerCluster(name='Outside Points').add_to(m)
+                    
+                    for idx, row in gdf_points.iterrows():
+                        if row['location_status'] == 'Inside':
+                            folium.CircleMarker(
+                                location=[row[y_col], row[x_col]],
+                                radius=4,
+                                color='#2ecc71',
+                                fill=True,
+                                fill_color='#2ecc71',
+                                fill_opacity=0.8,
+                                popup=f"Status: Inside"
+                            ).add_to(marker_cluster_inside)
+                        else:
+                            folium.CircleMarker(
+                                location=[row[y_col], row[x_col]],
+                                radius=4,
+                                color='#e74c3c',
+                                fill=True,
+                                fill_color='#e74c3c',
+                                fill_opacity=0.8,
+                                popup=f"Status: Outside"
+                            ).add_to(marker_cluster_outside)
+                    
+                    folium.LayerControl().add_to(m)
+                
                 else:
-                    st.info("Large dataset: Plotting simple markers.")
-                    folium.CircleMarker(location=[center_lat, center_lon], radius=1, color='gray').add_to(m)
+                    # Large dataset: Sample points for visualization
+                    sample_size = 5000
+                    st.warning(f"⚠️ Large dataset ({num_points} points). Showing random sample of {sample_size} points for performance.")
+                    
+                    sampled_points = gdf_points.sample(n=sample_size, random_state=42)
+                    marker_cluster = MarkerCluster().add_to(m)
+                    
+                    for idx, row in sampled_points.iterrows():
+                        color = '#2ecc71' if row['location_status'] == 'Inside' else '#e74c3c'
+                        folium.CircleMarker(
+                            location=[row[y_col], row[x_col]],
+                            radius=3,
+                            color=color,
+                            fill=True,
+                            fill_color=color,
+                            fill_opacity=0.7,
+                            popup=f"Status: {row['location_status']}"
+                        ).add_to(marker_cluster)
 
                 st_folium(m, width=None, height=500, key="main_map")
-
-                st.write("### Valid Points (Outside)")
-                outside_points = gdf_points[gdf_points['location_status'] == 'Outside'].drop(columns='geometry')
-                st.dataframe(outside_points, use_container_width=True)
-                st.download_button("Download 'Outside' Points", outside_points.to_csv(index=False).encode('utf-8'), "outside_points.csv", "text/csv")
+                
+                # Legend
+                st.markdown("""
+                **Legend:**
+                - 🟢 Green markers = Inside polygon
+                - 🔴 Red markers = Outside polygon
+                - 🔵 Blue shaded area = GeoJSON polygon boundary
+                """)
 
             with tab2:
+                st.success(f"All valid coordinate data ({len(gdf_points)} rows)")
+                st.markdown("This includes points both **inside** and **outside** the polygon boundary.")
+                
+                # Prepare data without geometry column
+                all_valid_data = gdf_points.drop(columns='geometry').copy()
+                
+                # Display with status filter
+                status_filter = st.radio("Filter by location:", ["All", "Inside Only", "Outside Only"], horizontal=True)
+                if status_filter == "Inside Only":
+                    display_data = all_valid_data[all_valid_data['location_status'] == 'Inside']
+                elif status_filter == "Outside Only":
+                    display_data = all_valid_data[all_valid_data['location_status'] == 'Outside']
+                else:
+                    display_data = all_valid_data
+                
+                st.dataframe(display_data, use_container_width=True)
+                st.download_button(
+                    "Download All Valid Data", 
+                    all_valid_data.to_csv(index=False).encode('utf-8'), 
+                    "all_valid_points.csv", 
+                    "text/csv"
+                )
+
+            with tab3:
+                outside_points = gdf_points[gdf_points['location_status'] == 'Outside'].drop(columns='geometry')
+                st.warning(f"Found {len(outside_points)} valid points that fall OUTSIDE the polygon boundary")
+                st.markdown("These coordinates are valid (proper lat/lon format) but don't fall within your GeoJSON polygon.")
+                st.dataframe(outside_points, use_container_width=True)
+                if not outside_points.empty:
+                    st.download_button(
+                        "Download 'Outside' Points", 
+                        outside_points.to_csv(index=False).encode('utf-8'), 
+                        "outside_points.csv", 
+                        "text/csv"
+                    )
+
+            with tab4:
                 st.warning(f"Found {len(df_zero)} rows where coordinates are exactly (0, 0).")
                 st.markdown("These are often default values indicating **missing GPS data**.")
                 st.dataframe(df_zero, use_container_width=True)
                 if not df_zero.empty:
                     st.download_button("Download Zero-Coord Rows", df_zero.to_csv(index=False).encode('utf-8'), "zero_coordinate_rows.csv", "text/csv")
 
-            with tab3:
+            with tab5:
                 st.error(f"Found {len(df_invalid)} rows with invalid coordinates.")
                 st.markdown("These rows have text errors or impossible numbers (e.g., Lat > 90).")
                 st.dataframe(df_invalid, use_container_width=True)
                 if not df_invalid.empty:
                     st.download_button("Download Invalid Rows", df_invalid.to_csv(index=False).encode('utf-8'), "invalid_rows.csv", "text/csv")
 
-            with tab4:
+            with tab6:
                 st.metric("Total Rows", res['df_raw_len'])
-                c1, c2, c3, c4 = st.columns(4)
+                c1, c2, c3, c4, c5 = st.columns(5)
+                inside_count = len(gdf_points[gdf_points['location_status'] == 'Inside'])
+                outside_count = len(gdf_points[gdf_points['location_status'] == 'Outside'])
+                
                 c1.metric("Valid Rows", len(gdf_points))
-                c2.metric("Zero (0,0) Rows", len(df_zero))
-                c3.metric("Invalid Rows", len(df_invalid))
-                c4.metric("Outside Boundary", len(gdf_points[gdf_points['location_status'] == 'Outside']))
+                c2.metric("✅ Inside Polygon", inside_count)
+                c3.metric("🔴 Outside Polygon", outside_count)
+                c4.metric("Zero (0,0) Rows", len(df_zero))
+                c5.metric("Invalid Rows", len(df_invalid))
