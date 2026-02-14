@@ -23,14 +23,36 @@ st.markdown("""
 <style>
 .step-section {
     padding: 25px;
-    border-radius: 15px;
+    padding-left: 30px;
+    border-radius: 10px;
     margin: 20px 0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
-.step-1 { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-.step-2 { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
-.step-3 { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
-.results-section { background: white; padding: 25px; border-radius: 15px; margin: 20px 0; }
-.step-section h3 { color: white; margin-top: 0; }
+.step-1 { 
+    background: linear-gradient(to right, #f0ebff 0%, #faf8ff 100%);
+    border-left: 10px solid #667eea;
+}
+.step-2 { 
+    background: linear-gradient(to right, #fff0f6 0%, #fff8fa 100%);
+    border-left: 10px solid #f5576c;
+}
+.step-3 { 
+    background: linear-gradient(to right, #e6f9ff 0%, #f0fcff 100%);
+    border-left: 10px solid #00f2fe;
+}
+.results-section { 
+    background: #ffffff; 
+    padding: 25px; 
+    border-radius: 10px; 
+    margin: 20px 0;
+    border: 2px solid #e0e0e0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+.step-section h3 { 
+    color: #2c3e50; 
+    margin-top: 0;
+    font-weight: 600;
+}
 .step-section .stFileUploader, .step-section .stSelectbox, .step-section .stButton, 
 .step-section .stExpander, .step-section .stInfo, .step-section .stSuccess {
     margin-top: 15px;
