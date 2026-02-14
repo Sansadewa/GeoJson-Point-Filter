@@ -49,19 +49,32 @@ if 'spatial_results' not in st.session_state:
 # --- Step 2: Process Data File ---
 if csv_file is not None:
 
-    # Load CSV or Excel with caching to prevent re-reading on every interaction
+    # Load PREVIEW ONLY (first 100 rows) for column selection
     @st.cache_data
-    def load_data_file(file_bytes, file_name, separator):
-        """Cache data loading to prevent re-reading on dropdown changes"""
+    def load_preview(file_bytes, file_name, separator, nrows=100):
+        """Load only first N rows for preview"""
         file_extension = file_name.split('.')[-1].lower()
         
         if file_extension in ['xlsx', 'xls']:
-            # Read Excel file
+            from io import BytesIO
+            df = pd.read_excel(BytesIO(file_bytes), dtype=str, nrows=nrows)
+            return df, 'Excel'
+        else:
+            from io import StringIO
+            df = pd.read_csv(StringIO(file_bytes.decode('utf-8')), sep=separator, dtype=str, nrows=nrows)
+            return df, 'CSV'
+    
+    # Load full file (cached)
+    @st.cache_data
+    def load_full_file(file_bytes, file_name, separator):
+        """Load complete file - only called when validation button is clicked"""
+        file_extension = file_name.split('.')[-1].lower()
+        
+        if file_extension in ['xlsx', 'xls']:
             from io import BytesIO
             df = pd.read_excel(BytesIO(file_bytes), dtype=str)
             return df, 'Excel'
         else:
-            # Read CSV/TXT file
             from io import StringIO
             df = pd.read_csv(StringIO(file_bytes.decode('utf-8')), sep=separator, dtype=str)
             return df, 'CSV'
@@ -69,8 +82,14 @@ if csv_file is not None:
     try:
         csv_file.seek(0)
         file_bytes = csv_file.read()
-        df, file_type = load_data_file(file_bytes, csv_file.name, sep)
-        st.success(f"✅ Loaded {file_type} file: {csv_file.name} ({len(df):,} rows, {len(df.columns)} columns)")
+        
+        # Load preview only for UI
+        df_preview, file_type = load_preview(file_bytes, csv_file.name, sep, nrows=100)
+        st.success(f"✅ Loaded preview of {file_type} file: {csv_file.name} (showing first 100 rows for column selection)")
+        st.info("💡 Full file will be processed when you click 'Validate Data Quality'")
+        
+        # Use preview for UI
+        df = df_preview
     except Exception as e:
         st.error(f"Error reading file: {e}")
         st.stop()
@@ -91,26 +110,27 @@ if csv_file is not None:
         st.write("**First 5 Rows:**")
         st.dataframe(df.head(), use_container_width=True)
 
-    # Column Selectors
-    st.divider()
-    st.subheader("⚙️ Configure Coordinates")
-    columns = df.columns.tolist()
-    
-    c1, c2 = st.columns(2)
-    with c1:
-        x_col = st.selectbox("Select X Column (Longitude)", options=columns, index=0)
-    with c2:
-        y_col = st.selectbox("Select Y Column (Latitude)", options=columns, index=1 if len(columns) > 1 else 0)
-
     # --- Step 2: Data Validation (No GeoJSON needed) ---
     st.divider()
-    st.subheader("🔍 Step 2: Validate Coordinates")
+    st.subheader("🔍 Step 2: Configure & Validate Coordinates")
+    
+    # Column Selectors
+    columns = df.columns.tolist()
+    c1, c2 = st.columns(2)
+    with c1:
+        x_col = st.selectbox("Select X Column (Longitude)", options=columns, index=0, key="x_col_select")
+    with c2:
+        y_col = st.selectbox("Select Y Column (Latitude)", options=columns, index=1 if len(columns) > 1 else 0, key="y_col_select")
     
     if st.button("✅ Validate Data Quality", type="primary", use_container_width=True):
-        with st.spinner("Analyzing coordinate quality..."):
+        with st.spinner("Loading full file and analyzing coordinate quality..."):
+            
+            # Load FULL file now
+            df_full, _ = load_full_file(file_bytes, csv_file.name, sep)
+            st.info(f"📊 Processing {len(df_full):,} total rows...")
             
             # 1. Clean Data (Handle commas)
-            df_clean = df.copy()
+            df_clean = df_full.copy()
             def clean_coord(val):
                 if pd.isna(val): return np.nan
                 val = str(val).strip().replace(',', '.')
@@ -137,15 +157,15 @@ if csv_file is not None:
 
             # Create DataFrames
             df_valid = df_clean[valid_mask].copy()
-            df_zero = df[zero_mask].copy()
-            df_invalid = df[~(valid_mask | zero_mask)].copy()
+            df_zero = df_full[zero_mask].copy()
+            df_invalid = df_full[~(valid_mask | zero_mask)].copy()
 
             # Save validation results
             st.session_state.validation_results = {
                 'df_valid': df_valid,
                 'df_invalid': df_invalid,
                 'df_zero': df_zero,
-                'df_raw_len': len(df),
+                'df_raw_len': len(df_full),
                 'x_col': x_col,
                 'y_col': y_col
             }
