@@ -22,17 +22,20 @@ with col2:
 # --- Step 1.5: CSV Delimiter Settings ---
 sep = ","
 if csv_file is not None:
-    with st.expander("🛠️ CSV Settings (Click if columns look wrong)", expanded=False):
-        sep_option = st.selectbox(
-            "Select Column Separator",
-            options=["Comma (,)", "Semicolon (;)", "Tab (\\t)", "Pipe (|)", "Custom"],
-            index=0
-        )
-        if sep_option == "Comma (,)": sep = ","
-        elif sep_option == "Semicolon (;)": sep = ";"
-        elif sep_option == "Tab (\\t)": sep = "\t"
-        elif sep_option == "Pipe (|)": sep = "|"
-        else: sep = st.text_input("Enter Custom Delimiter", value=",")
+    # Only show delimiter settings for CSV/TXT files, not Excel
+    file_extension = csv_file.name.split('.')[-1].lower()
+    if file_extension not in ['xlsx', 'xls']:
+        with st.expander("🛠️ CSV Settings (Click if columns look wrong)", expanded=False):
+            sep_option = st.selectbox(
+                "Select Column Separator",
+                options=["Comma (,)", "Semicolon (;)", "Tab (\\t)", "Pipe (|)", "Custom"],
+                index=0
+            )
+            if sep_option == "Comma (,)": sep = ","
+            elif sep_option == "Semicolon (;)": sep = ";"
+            elif sep_option == "Tab (\\t)": sep = "\t"
+            elif sep_option == "Pipe (|)": sep = "|"
+            else: sep = st.text_input("Enter Custom Delimiter", value=",")
 
 # --- Session State ---
 if 'results' not in st.session_state:
