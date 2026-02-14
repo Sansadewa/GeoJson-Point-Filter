@@ -377,7 +377,7 @@ if csv_file is not None:
                     st.download_button("Download Invalid Rows", df_invalid.to_csv(index=False).encode('utf-8'), "invalid_rows.csv", "text/csv")
 
             with tab6:
-                st.metric("Total Rows", val_res['df_raw_len'])
+                st.metric("Total Rows", res['df_raw_len'])
                 c1, c2, c3, c4, c5 = st.columns(5)
                 inside_count = len(gdf_points[gdf_points['location_status'] == 'Inside'])
                 outside_count = len(gdf_points[gdf_points['location_status'] == 'Outside'])
@@ -387,37 +387,3 @@ if csv_file is not None:
                 c3.metric("🔴 Outside Polygon", outside_count)
                 c4.metric("Zero (0,0) Rows", len(df_zero))
                 c5.metric("Invalid Rows", len(df_invalid))
-        
-        else:
-            # VALIDATION ONLY MODE: Show only data quality tabs
-            with tab2:
-                st.success(f"Valid coordinate data ({len(df_valid)} rows)")
-                st.markdown("These coordinates pass validation (proper lat/lon format).")
-                st.dataframe(df_valid, use_container_width=True)
-                st.download_button(
-                    "Download Valid Data", 
-                    df_valid.to_csv(index=False).encode('utf-8'), 
-                    "valid_coordinates.csv", 
-                    "text/csv"
-                )
-            
-            with tab4:
-                st.warning(f"Found {len(df_zero)} rows where coordinates are exactly (0, 0).")
-                st.markdown("These are often default values indicating **missing GPS data**.")
-                st.dataframe(df_zero, use_container_width=True)
-                if not df_zero.empty:
-                    st.download_button("Download Zero-Coord Rows", df_zero.to_csv(index=False).encode('utf-8'), "zero_coordinate_rows.csv", "text/csv")
-            
-            with tab5:
-                st.error(f"Found {len(df_invalid)} rows with invalid coordinates.")
-                st.markdown("These rows have text errors or impossible numbers (e.g., Lat > 90).")
-                st.dataframe(df_invalid, use_container_width=True)
-                if not df_invalid.empty:
-                    st.download_button("Download Invalid Rows", df_invalid.to_csv(index=False).encode('utf-8'), "invalid_rows.csv", "text/csv")
-            
-            with tab6:
-                st.metric("Total Rows", val_res['df_raw_len'])
-                c1, c2, c3 = st.columns(3)
-                c1.metric("✅ Valid Rows", len(df_valid))
-                c2.metric("0️⃣ Zero (0,0) Rows", len(df_zero))
-                c3.metric("❌ Invalid Rows", len(df_invalid))
