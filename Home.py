@@ -49,15 +49,27 @@ if 'spatial_results' not in st.session_state:
 # --- Step 2: Process Data File ---
 if csv_file is not None:
 
+    # Get Excel sheet names
+    @st.cache_data
+    def get_excel_sheets(file_bytes, file_name):
+        """Get list of sheet names from Excel file"""
+        file_extension = file_name.split('.')[-1].lower()
+        
+        if file_extension in ['xlsx', 'xls']:
+            from io import BytesIO
+            excel_file = pd.ExcelFile(BytesIO(file_bytes))
+            return excel_file.sheet_names
+        return None
+    
     # Load PREVIEW ONLY (first 100 rows) for column selection
     @st.cache_data
-    def load_preview(file_bytes, file_name, separator, nrows=100):
+    def load_preview(file_bytes, file_name, separator, sheet_name=None, nrows=100):
         """Load only first N rows for preview"""
         file_extension = file_name.split('.')[-1].lower()
         
         if file_extension in ['xlsx', 'xls']:
             from io import BytesIO
-            df = pd.read_excel(BytesIO(file_bytes), dtype=str, nrows=nrows)
+            df = pd.read_excel(BytesIO(file_bytes), dtype=str, nrows=nrows, sheet_name=sheet_name)
             return df, 'Excel'
         else:
             from io import StringIO
@@ -66,13 +78,13 @@ if csv_file is not None:
     
     # Load full file (cached)
     @st.cache_data
-    def load_full_file(file_bytes, file_name, separator):
+    def load_full_file(file_bytes, file_name, separator, sheet_name=None):
         """Load complete file - only called when validation button is clicked"""
         file_extension = file_name.split('.')[-1].lower()
         
         if file_extension in ['xlsx', 'xls']:
             from io import BytesIO
-            df = pd.read_excel(BytesIO(file_bytes), dtype=str)
+            df = pd.read_excel(BytesIO(file_bytes), dtype=str, sheet_name=sheet_name)
             return df, 'Excel'
         else:
             from io import StringIO
@@ -83,9 +95,32 @@ if csv_file is not None:
         csv_file.seek(0)
         file_bytes = csv_file.read()
         
+        # Check if Excel file with multiple sheets
+        file_extension = csv_file.name.split('.')[-1].lower()
+        selected_sheet = None
+        
+        if file_extension in ['xlsx', 'xls']:
+            sheet_names = get_excel_sheets(file_bytes, csv_file.name)
+            
+            if sheet_names and len(sheet_names) > 1:
+                st.info(f"📊 This Excel file has {len(sheet_names)} sheets")
+                selected_sheet = st.selectbox(
+                    "Select sheet to analyze:",
+                    options=sheet_names,
+                    index=0,
+                    key="sheet_selector"
+                )
+            elif sheet_names:
+                selected_sheet = sheet_names[0]
+        
         # Load preview only for UI
-        df_preview, file_type = load_preview(file_bytes, csv_file.name, sep, nrows=100)
-        st.success(f"✅ Loaded preview of {file_type} file: {csv_file.name} (showing first 100 rows for column selection)")
+        df_preview, file_type = load_preview(file_bytes, csv_file.name, sep, sheet_name=selected_sheet, nrows=100)
+        
+        if selected_sheet:
+            st.success(f"✅ Loaded preview of {file_type} file: {csv_file.name} - Sheet: '{selected_sheet}' (showing first 100 rows for column selection)")
+        else:
+            st.success(f"✅ Loaded preview of {file_type} file: {csv_file.name} (showing first 100 rows for column selection)")
+        
         st.info("💡 Full file will be processed when you click 'Validate Data Quality'")
         
         # Use preview for UI
@@ -126,7 +161,7 @@ if csv_file is not None:
         with st.spinner("Loading full file and analyzing coordinate quality..."):
             
             # Load FULL file now
-            df_full, _ = load_full_file(file_bytes, csv_file.name, sep)
+            df_full, _ = load_full_file(file_bytes, csv_file.name, sep, sheet_name=selected_sheet)
             st.info(f"📊 Processing {len(df_full):,} total rows...")
             
             # 1. Clean Data (Handle commas)
