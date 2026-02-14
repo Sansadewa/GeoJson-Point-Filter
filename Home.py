@@ -21,66 +21,81 @@ st.markdown("""
 # --- Step 1: File Upload ---
 st.markdown("""
 <style>
-.step-section {
-    padding: 25px;
-    padding-left: 30px;
-    border-radius: 10px;
-    margin: 20px 0;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+/* Apply colored backgrounds to Streamlit's block containers */
+[data-testid="stVerticalBlock"] > [data-testid="stVerticalBlock"]:has(> div > div > div > [data-testid="stMarkdownContainer"] > p > strong:first-child) {
+    padding: 25px !important;
+    padding-left: 30px !important;
+    border-radius: 10px !important;
+    margin: 20px 0 !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
 }
-.step-1 { 
-    background: linear-gradient(to right, #f0ebff 0%, #faf8ff 100%);
-    border-left: 10px solid #667eea;
+
+/* Step 1 - Purple theme */
+div.stMarkdown:has(h3:contains("Step 1")) {
+    color: #2c3e50 !important;
 }
-.step-2 { 
-    background: linear-gradient(to right, #fff0f6 0%, #fff8fa 100%);
-    border-left: 10px solid #f5576c;
+[data-testid="stVerticalBlock"]:has(h3:contains("Step 1")) {
+    background: linear-gradient(to right, #f0ebff 0%, #faf8ff 100%) !important;
+    border-left: 10px solid #667eea !important;
+    padding: 25px !important;
+    padding-left: 30px !important;
+    border-radius: 10px !important;
+    margin: 20px 0 !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
 }
-.step-3 { 
-    background: linear-gradient(to right, #e6f9ff 0%, #f0fcff 100%);
-    border-left: 10px solid #00f2fe;
+
+/* Step 2 - Pink theme */
+[data-testid="stVerticalBlock"]:has(h3:contains("Step 2")) {
+    background: linear-gradient(to right, #fff0f6 0%, #fff8fa 100%) !important;
+    border-left: 10px solid #f5576c !important;
+    padding: 25px !important;
+    padding-left: 30px !important;
+    border-radius: 10px !important;
+    margin: 20px 0 !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
 }
-.results-section { 
-    background: #ffffff; 
-    padding: 25px; 
-    border-radius: 10px; 
-    margin: 20px 0;
-    border: 2px solid #e0e0e0;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+
+/* Step 3 - Blue theme */
+[data-testid="stVerticalBlock"]:has(h3:contains("Step 3")) {
+    background: linear-gradient(to right, #e6f9ff 0%, #f0fcff 100%) !important;
+    border-left: 10px solid #00f2fe !important;
+    padding: 25px !important;
+    padding-left: 30px !important;
+    border-radius: 10px !important;
+    margin: 20px 0 !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
 }
-.step-section h3 { 
-    color: #2c3e50; 
-    margin-top: 0;
-    font-weight: 600;
-}
-.step-section .stFileUploader, .step-section .stSelectbox, .step-section .stButton, 
-.step-section .stExpander, .step-section .stInfo, .step-section .stSuccess {
-    margin-top: 15px;
+
+/* Headings styling */
+h3 {
+    color: #2c3e50 !important;
+    font-weight: 600 !important;
 }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="step-section step-1">', unsafe_allow_html=True)
-st.markdown('<h3>📂 Step 1: Upload Your Data File</h3>', unsafe_allow_html=True)
-csv_file = st.file_uploader("Upload CSV/Excel (Points)", type=['csv', 'txt', 'xlsx', 'xls'])
+# Use st.container() to wrap Step 1 content
+sep = ","  # Initialize outside container for global access
+with st.container():
+    st.markdown('<h3>📂 Step 1: Upload Your Data File</h3>', unsafe_allow_html=True)
+    csv_file = st.file_uploader("Upload CSV/Excel (Points)", type=['csv', 'txt', 'xlsx', 'xls'])
 
-# --- Step 1.5: CSV Delimiter Settings ---
-sep = ","
-if csv_file is not None:
-    # Only show delimiter settings for CSV/TXT files, not Excel
-    file_extension = csv_file.name.split('.')[-1].lower()
-    if file_extension not in ['xlsx', 'xls']:
-        with st.expander("🛠️ CSV Settings (Click if columns look wrong)", expanded=False):
-            sep_option = st.selectbox(
-                "Select Column Separator",
-                options=["Comma (,)", "Semicolon (;)", "Tab (\\t)", "Pipe (|)", "Custom"],
-                index=0
-            )
-            if sep_option == "Comma (,)": sep = ","
-            elif sep_option == "Semicolon (;)": sep = ";"
-            elif sep_option == "Tab (\\t)": sep = "\t"
-            elif sep_option == "Pipe (|)": sep = "|"
-            else: sep = st.text_input("Enter Custom Delimiter", value=",")
+    # --- Step 1.5: CSV Delimiter Settings ---
+    if csv_file is not None:
+        # Only show delimiter settings for CSV/TXT files, not Excel
+        file_extension = csv_file.name.split('.')[-1].lower()
+        if file_extension not in ['xlsx', 'xls']:
+            with st.expander("🛠️ CSV Settings (Click if columns look wrong)", expanded=False):
+                sep_option = st.selectbox(
+                    "Select Column Separator",
+                    options=["Comma (,)", "Semicolon (;)", "Tab (\\t)", "Pipe (|)", "Custom"],
+                    index=0
+                )
+                if sep_option == "Comma (,)": sep = ","
+                elif sep_option == "Semicolon (;)": sep = ";"
+                elif sep_option == "Tab (\\t)": sep = "\t"
+                elif sep_option == "Pipe (|)": sep = "|"
+                else: sep = st.text_input("Enter Custom Delimiter", value=",")
 
 st.markdown('</div>', unsafe_allow_html=True)  # Close Step 1
 
