@@ -19,83 +19,41 @@ st.markdown("""
 """)
 
 # --- Step 1: File Upload ---
+sep = ","  # Initialize outside container for global access
+
+# Opening div for Step 1 with inline styles
 st.markdown("""
-<style>
-/* Apply colored backgrounds to Streamlit's block containers */
-[data-testid="stVerticalBlock"] > [data-testid="stVerticalBlock"]:has(> div > div > div > [data-testid="stMarkdownContainer"] > p > strong:first-child) {
-    padding: 25px !important;
-    padding-left: 30px !important;
-    border-radius: 10px !important;
-    margin: 20px 0 !important;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
-}
-
-/* Step 1 - Purple theme */
-div.stMarkdown:has(h3:contains("Step 1")) {
-    color: #2c3e50 !important;
-}
-[data-testid="stVerticalBlock"]:has(h3:contains("Step 1")) {
-    background: linear-gradient(to right, #f0ebff 0%, #faf8ff 100%) !important;
-    border-left: 10px solid #667eea !important;
-    padding: 25px !important;
-    padding-left: 30px !important;
-    border-radius: 10px !important;
-    margin: 20px 0 !important;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
-}
-
-/* Step 2 - Pink theme */
-[data-testid="stVerticalBlock"]:has(h3:contains("Step 2")) {
-    background: linear-gradient(to right, #fff0f6 0%, #fff8fa 100%) !important;
-    border-left: 10px solid #f5576c !important;
-    padding: 25px !important;
-    padding-left: 30px !important;
-    border-radius: 10px !important;
-    margin: 20px 0 !important;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
-}
-
-/* Step 3 - Blue theme */
-[data-testid="stVerticalBlock"]:has(h3:contains("Step 3")) {
-    background: linear-gradient(to right, #e6f9ff 0%, #f0fcff 100%) !important;
-    border-left: 10px solid #00f2fe !important;
-    padding: 25px !important;
-    padding-left: 30px !important;
-    border-radius: 10px !important;
-    margin: 20px 0 !important;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
-}
-
-/* Headings styling */
-h3 {
-    color: #2c3e50 !important;
-    font-weight: 600 !important;
-}
-</style>
+<div style="background: linear-gradient(to right, #f0ebff 0%, #faf8ff 100%); 
+            border-left: 10px solid #667eea; 
+            padding: 25px; 
+            padding-left: 30px; 
+            border-radius: 10px; 
+            margin: 20px 0; 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+    <h3 style="color: #2c3e50; margin-top: 0; font-weight: 600;">📂 Step 1: Upload Your Data File</h3>
 """, unsafe_allow_html=True)
 
-# Use st.container() to wrap Step 1 content
-sep = ","  # Initialize outside container for global access
-with st.container():
-    st.markdown('<h3>📂 Step 1: Upload Your Data File</h3>', unsafe_allow_html=True)
-    csv_file = st.file_uploader("Upload CSV/Excel (Points)", type=['csv', 'txt', 'xlsx', 'xls'])
+csv_file = st.file_uploader("Upload CSV/Excel (Points)", type=['csv', 'txt', 'xlsx', 'xls'])
 
-    # --- Step 1.5: CSV Delimiter Settings ---
-    if csv_file is not None:
-        # Only show delimiter settings for CSV/TXT files, not Excel
-        file_extension = csv_file.name.split('.')[-1].lower()
-        if file_extension not in ['xlsx', 'xls']:
-            with st.expander("🛠️ CSV Settings (Click if columns look wrong)", expanded=False):
-                sep_option = st.selectbox(
-                    "Select Column Separator",
-                    options=["Comma (,)", "Semicolon (;)", "Tab (\\t)", "Pipe (|)", "Custom"],
-                    index=0
-                )
-                if sep_option == "Comma (,)": sep = ","
-                elif sep_option == "Semicolon (;)": sep = ";"
-                elif sep_option == "Tab (\\t)": sep = "\t"
-                elif sep_option == "Pipe (|)": sep = "|"
-                else: sep = st.text_input("Enter Custom Delimiter", value=",")
+# --- Step 1.5: CSV Delimiter Settings ---
+if csv_file is not None:
+    # Only show delimiter settings for CSV/TXT files, not Excel
+    file_extension = csv_file.name.split('.')[-1].lower()
+    if file_extension not in ['xlsx', 'xls']:
+        with st.expander("🛠️ CSV Settings (Click if columns look wrong)", expanded=False):
+            sep_option = st.selectbox(
+                "Select Column Separator",
+                options=["Comma (,)", "Semicolon (;)", "Tab (\\t)", "Pipe (|)", "Custom"],
+                index=0
+            )
+            if sep_option == "Comma (,)": sep = ","
+            elif sep_option == "Semicolon (;)": sep = ";"
+            elif sep_option == "Tab (\\t)": sep = "\t"
+            elif sep_option == "Pipe (|)": sep = "|"
+            else: sep = st.text_input("Enter Custom Delimiter", value=",")
+
+# Close Step 1 div
+st.markdown("</div>", unsafe_allow_html=True)
 
 # --- Session State ---
 if 'validation_results' not in st.session_state:
@@ -105,9 +63,19 @@ if 'spatial_results' not in st.session_state:
 
 # --- Step 2: Process Data File ---
 if csv_file is not None:
+    # Opening div for Step 2
+    st.markdown("""
+    <div style="background: linear-gradient(to right, #fff0f6 0%, #fff8fa 100%); 
+                border-left: 10px solid #f5576c; 
+                padding: 25px; 
+                padding-left: 30px; 
+                border-radius: 10px; 
+                margin: 20px 0; 
+                box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+        <h3 style="color: #2c3e50; margin-top: 0; font-weight: 600;">🔍 Step 2: Configure & Validate Coordinates</h3>
+    """, unsafe_allow_html=True)
+    
     with st.container():
-        st.markdown('<h3>🔍 Step 2: Configure & Validate Coordinates</h3>', unsafe_allow_html=True)
-
         # Get Excel sheet names
         @st.cache_data
         def get_excel_sheets(file_bytes, file_name):
@@ -293,10 +261,24 @@ if csv_file is not None:
                 }
                 st.success("✅ Data validation complete!")
     
+    # Close Step 2 div
+    st.markdown("</div>", unsafe_allow_html=True)
+    
     # --- Step 3: Spatial Analysis (Optional) ---
     if st.session_state.validation_results:
+        # Opening div for Step 3
+        st.markdown("""
+        <div style="background: linear-gradient(to right, #e6f9ff 0%, #f0fcff 100%); 
+                    border-left: 10px solid #00f2fe; 
+                    padding: 25px; 
+                    padding-left: 30px; 
+                    border-radius: 10px; 
+                    margin: 20px 0; 
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+            <h3 style="color: #2c3e50; margin-top: 0; font-weight: 600;">🗺️ Step 3: Spatial Analysis (Optional)</h3>
+        """, unsafe_allow_html=True)
+        
         with st.container():
-            st.markdown('<h3>🗺️ Step 3: Spatial Analysis (Optional)</h3>', unsafe_allow_html=True)
             st.info("Upload a GeoJSON polygon to find which valid points are inside/outside the boundary.")
             
             geojson_file = st.file_uploader("Upload GeoJSON (Polygon) - Optional", type=['geojson', 'json'])
@@ -337,6 +319,9 @@ if csv_file is not None:
                             st.success("✅ Spatial analysis complete!")
                         else:
                             st.error("No valid coordinates to analyze spatially.")
+        
+        # Close Step 3 div
+        st.markdown("</div>", unsafe_allow_html=True)
 
 # --- Results Section (White Background) ---
 if st.session_state.validation_results:
