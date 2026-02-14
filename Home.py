@@ -55,19 +55,28 @@ if geojson_file is not None and csv_file is not None:
         st.error(f"Error reading GeoJSON: {e}")
         st.stop()
 
-    # Load CSV or Excel
-    try:
-        csv_file.seek(0)
-        file_extension = csv_file.name.split('.')[-1].lower()
+    # Load CSV or Excel with caching to prevent re-reading on every interaction
+    @st.cache_data
+    def load_data_file(file_bytes, file_name, separator):
+        """Cache data loading to prevent re-reading on dropdown changes"""
+        file_extension = file_name.split('.')[-1].lower()
         
         if file_extension in ['xlsx', 'xls']:
             # Read Excel file
-            df = pd.read_excel(csv_file, dtype=str)
-            st.info(f"📊 Loaded Excel file: {csv_file.name}")
+            from io import BytesIO
+            df = pd.read_excel(BytesIO(file_bytes), dtype=str)
+            return df, 'Excel'
         else:
             # Read CSV/TXT file
-            df = pd.read_csv(csv_file, sep=sep, dtype=str)
-            st.info(f"📄 Loaded CSV file: {csv_file.name}")
+            from io import StringIO
+            df = pd.read_csv(StringIO(file_bytes.decode('utf-8')), sep=separator, dtype=str)
+            return df, 'CSV'
+    
+    try:
+        csv_file.seek(0)
+        file_bytes = csv_file.read()
+        df, file_type = load_data_file(file_bytes, csv_file.name, sep)
+        st.success(f"✅ Loaded {file_type} file: {csv_file.name} ({len(df):,} rows, {len(df.columns)} columns)")
     except Exception as e:
         st.error(f"Error reading file: {e}")
         st.stop()
@@ -76,21 +85,14 @@ if geojson_file is not None and csv_file is not None:
     st.divider()
     st.subheader("📋 Data Preview & Validation")
     
-    with st.expander("📊 View Data Quality Summary", expanded=True):
+    with st.expander("📊 View Data Quality Summary", expanded=False):
         col_a, col_b, col_c = st.columns(3)
         col_a.metric("Total Rows", len(df))
         col_b.metric("Total Columns", len(df.columns))
         col_c.metric("File Size", f"{csv_file.size / (1024*1024):.2f} MB")
         
-        st.write("**Column Names & Data Types:**")
-        preview_df = pd.DataFrame({
-            'Column Name': df.columns,
-            'Data Type': [str(df[col].dtype) for col in df.columns],
-            'Non-Null Count': [df[col].notna().sum() for col in df.columns],
-            'Null Count': [df[col].isna().sum() for col in df.columns],
-            'Sample Value': [str(df[col].iloc[0]) if len(df) > 0 else 'N/A' for col in df.columns]
-        })
-        st.dataframe(preview_df, use_container_width=True)
+        st.write("**Column Names:**")
+        st.write(", ".join(df.columns.tolist()))
         
         st.write("**First 5 Rows:**")
         st.dataframe(df.head(), use_container_width=True)
