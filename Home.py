@@ -19,7 +19,20 @@ st.markdown("""
 """)
 
 # --- Step 1: File Upload ---
-st.subheader("📂 Step 1: Upload Your Data File")
+st.markdown("""
+<style>
+.step-card {
+    padding: 20px;
+    border-radius: 10px;
+    margin: 10px 0;
+}
+.step-1 { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+.step-2 { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; }
+.step-3 { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white; }
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown('<div class="step-card step-1"><h3>📂 Step 1: Upload Your Data File</h3></div>', unsafe_allow_html=True)
 csv_file = st.file_uploader("Upload CSV/Excel (Points)", type=['csv', 'txt', 'xlsx', 'xls'])
 
 # --- Step 1.5: CSV Delimiter Settings ---
@@ -147,7 +160,7 @@ if csv_file is not None:
 
     # --- Step 2: Data Validation (No GeoJSON needed) ---
     st.divider()
-    st.subheader("🔍 Step 2: Configure & Validate Coordinates")
+    st.markdown('<div class="step-card step-2"><h3>🔍 Step 2: Configure & Validate Coordinates</h3></div>', unsafe_allow_html=True)
     
     # Column Selectors
     columns = df.columns.tolist()
@@ -238,10 +251,50 @@ if csv_file is not None:
             }
             st.success("✅ Data validation complete!")
     
+    # --- Display Validation Results (After Step 2) ---
+    if st.session_state.validation_results:
+        st.divider()
+        st.markdown("### 📊 Validation Results")
+        
+        val_res = st.session_state.validation_results
+        spatial_res = st.session_state.spatial_results
+        
+        df_valid = val_res['df_valid']
+        df_invalid = val_res['df_invalid']
+        df_zero = val_res['df_zero']
+        df_empty = val_res['df_empty']
+        x_col = val_res['x_col']
+        y_col = val_res['y_col']
+        
+        # Show tabs based on whether spatial analysis is done
+        if spatial_res:
+            # SPATIAL MODE: Show all tabs including map
+            gdf_points = spatial_res['gdf_points']
+            gdf_polygon = spatial_res['gdf_polygon']
+            
+            tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+                "🗺️ Map", 
+                "✅ All Valid Data", 
+                "🔴 Valid but Outside", 
+                "0️⃣ Zero Coordinates",
+                "📭 Empty/Null",
+                "❌ Invalid Data", 
+                "📊 Summary"
+            ])
+        else:
+            # VALIDATION ONLY MODE: Show only data quality tabs
+            tab2, tab4, tab5, tab6, tab7 = st.tabs([
+                "✅ Valid Coordinates",
+                "0️⃣ Zero Coordinates",
+                "📭 Empty/Null",
+                "❌ Invalid Data", 
+                "📊 Summary"
+            ])
+    
     # --- Step 3: Spatial Analysis (Optional) ---
     if st.session_state.validation_results:
         st.divider()
-        st.subheader("🗺️ Step 3: Spatial Analysis (Optional)")
+        st.markdown('<div class="step-card step-3"><h3>🗺️ Step 3: Spatial Analysis (Optional)</h3></div>', unsafe_allow_html=True)
         st.info("Upload a GeoJSON polygon to find which valid points are inside/outside the boundary.")
         
         geojson_file = st.file_uploader("Upload GeoJSON (Polygon) - Optional", type=['geojson', 'json'])
@@ -282,43 +335,8 @@ if csv_file is not None:
                         st.success("✅ Spatial analysis complete!")
                     else:
                         st.error("No valid coordinates to analyze spatially.")
-
-    # --- Step 4: Display Results ---
-    st.divider()
-    if st.session_state.validation_results:
-        val_res = st.session_state.validation_results
-        spatial_res = st.session_state.spatial_results
         
-        df_valid = val_res['df_valid']
-        df_invalid = val_res['df_invalid']
-        df_zero = val_res['df_zero']
-        df_empty = val_res['df_empty']
-        x_col = val_res['x_col']
-        y_col = val_res['y_col']
-        
-        # Determine which tabs to show
-        if spatial_res:
-            # Show all tabs (including map and spatial analysis)
-            tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-                "🗺️ Map", 
-                "✅ All Valid Data", 
-                "🔴 Valid but Outside", 
-                "0️⃣ Zero Coordinates",
-                "📭 Empty/Null",
-                "❌ Invalid Data", 
-                "📊 Summary"
-            ])
-        else:
-            # Show only validation tabs (no map or spatial tabs)
-            tab2, tab4, tab5, tab6, tab7 = st.tabs([
-                "✅ Valid Coordinates",
-                "0️⃣ Zero Coordinates",
-                "📭 Empty/Null",
-                "❌ Invalid Data", 
-                "📊 Summary"
-            ])
-
-        # Render tabs based on mode
+        # --- Render Tab Content ---
         if spatial_res:
             # SPATIAL MODE: Show all tabs including map
             gdf_points = spatial_res['gdf_points']
