@@ -97,8 +97,6 @@ with st.container():
                 elif sep_option == "Pipe (|)": sep = "|"
                 else: sep = st.text_input("Enter Custom Delimiter", value=",")
 
-st.markdown('</div>', unsafe_allow_html=True)  # Close Step 1
-
 # --- Session State ---
 if 'validation_results' not in st.session_state:
     st.session_state.validation_results = None
@@ -107,242 +105,238 @@ if 'spatial_results' not in st.session_state:
 
 # --- Step 2: Process Data File ---
 if csv_file is not None:
-    st.markdown('<div class="step-section step-2">', unsafe_allow_html=True)
-    st.markdown('<h3>🔍 Step 2: Configure & Validate Coordinates</h3>', unsafe_allow_html=True)
+    with st.container():
+        st.markdown('<h3>🔍 Step 2: Configure & Validate Coordinates</h3>', unsafe_allow_html=True)
 
-    # Get Excel sheet names
-    @st.cache_data
-    def get_excel_sheets(file_bytes, file_name):
-        """Get list of sheet names from Excel file"""
-        file_extension = file_name.split('.')[-1].lower()
-        
-        if file_extension in ['xlsx', 'xls']:
-            from io import BytesIO
-            excel_file = pd.ExcelFile(BytesIO(file_bytes))
-            return excel_file.sheet_names
-        return None
-    
-    # Load PREVIEW ONLY (first 100 rows) for column selection
-    @st.cache_data
-    def load_preview(file_bytes, file_name, separator, sheet_name=None, nrows=100):
-        """Load only first N rows for preview"""
-        file_extension = file_name.split('.')[-1].lower()
-        
-        if file_extension in ['xlsx', 'xls']:
-            from io import BytesIO
-            df = pd.read_excel(BytesIO(file_bytes), dtype=str, nrows=nrows, sheet_name=sheet_name)
-            return df, 'Excel'
-        else:
-            from io import StringIO
-            df = pd.read_csv(StringIO(file_bytes.decode('utf-8')), sep=separator, dtype=str, nrows=nrows)
-            return df, 'CSV'
-    
-    # Load full file (cached)
-    @st.cache_data
-    def load_full_file(file_bytes, file_name, separator, sheet_name=None):
-        """Load complete file - only called when validation button is clicked"""
-        file_extension = file_name.split('.')[-1].lower()
-        
-        if file_extension in ['xlsx', 'xls']:
-            from io import BytesIO
-            df = pd.read_excel(BytesIO(file_bytes), dtype=str, sheet_name=sheet_name)
-            return df, 'Excel'
-        else:
-            from io import StringIO
-            df = pd.read_csv(StringIO(file_bytes.decode('utf-8')), sep=separator, dtype=str)
-            return df, 'CSV'
-    
-    try:
-        csv_file.seek(0)
-        file_bytes = csv_file.read()
-        
-        # Check if Excel file with multiple sheets
-        file_extension = csv_file.name.split('.')[-1].lower()
-        selected_sheet = None
-        
-        if file_extension in ['xlsx', 'xls']:
-            sheet_names = get_excel_sheets(file_bytes, csv_file.name)
+        # Get Excel sheet names
+        @st.cache_data
+        def get_excel_sheets(file_bytes, file_name):
+            """Get list of sheet names from Excel file"""
+            file_extension = file_name.split('.')[-1].lower()
             
-            if sheet_names and len(sheet_names) > 1:
-                st.info(f"📊 This Excel file has {len(sheet_names)} sheets")
-                selected_sheet = st.selectbox(
-                    "Select sheet to analyze:",
-                    options=sheet_names,
-                    index=0,
-                    key="sheet_selector"
-                )
-            elif sheet_names:
-                selected_sheet = sheet_names[0]
+            if file_extension in ['xlsx', 'xls']:
+                from io import BytesIO
+                excel_file = pd.ExcelFile(BytesIO(file_bytes))
+                return excel_file.sheet_names
+            return None
         
-        # Load preview only for UI
-        df_preview, file_type = load_preview(file_bytes, csv_file.name, sep, sheet_name=selected_sheet, nrows=100)
-        
-        if selected_sheet:
-            st.success(f"✅ Loaded preview of {file_type} file: {csv_file.name} - Sheet: '{selected_sheet}' (showing first 100 rows for column selection)")
-        else:
-            st.success(f"✅ Loaded preview of {file_type} file: {csv_file.name} (showing first 100 rows for column selection)")
-        
-        st.info("💡 Full file will be processed when you click 'Validate Data Quality'")
-        
-        # Use preview for UI
-        df = df_preview
-    except Exception as e:
-        st.error(f"Error reading file: {e}")
-        st.stop()
-    
-    # --- Data Validation Preview ---
-    st.divider()
-    st.subheader("📋 Data Preview & Validation")
-    
-    with st.expander("📊 View Data Quality Summary", expanded=False):
-        col_a, col_b, col_c = st.columns(3)
-        col_a.metric("Total Rows", len(df))
-        col_b.metric("Total Columns", len(df.columns))
-        col_c.metric("File Size", f"{csv_file.size / (1024*1024):.2f} MB")
-        
-        st.write("**Column Names:**")
-        st.write(", ".join(df.columns.tolist()))
-        
-        st.write("**First 5 Rows:**")
-        st.dataframe(df.head(), use_container_width=True)
-
-    # Column Selectors
-    columns = df.columns.tolist()
-    c1, c2 = st.columns(2)
-    with c1:
-        x_col = st.selectbox("Select X Column (Longitude)", options=columns, index=0, key="x_col_select")
-    with c2:
-        y_col = st.selectbox("Select Y Column (Latitude)", options=columns, index=1 if len(columns) > 1 else 0, key="y_col_select")
-    
-    if st.button("✅ Validate Data Quality", type="primary", use_container_width=True):
-        with st.spinner("Loading full file and analyzing coordinate quality..."):
+        # Load PREVIEW ONLY (first 100 rows) for column selection
+        @st.cache_data
+        def load_preview(file_bytes, file_name, separator, sheet_name=None, nrows=100):
+            """Load only first N rows for preview"""
+            file_extension = file_name.split('.')[-1].lower()
             
-            # Load FULL file now
-            df_full, _ = load_full_file(file_bytes, csv_file.name, sep, sheet_name=selected_sheet)
-            st.info(f"📊 Processing {len(df_full):,} total rows...")
+            if file_extension in ['xlsx', 'xls']:
+                from io import BytesIO
+                df = pd.read_excel(BytesIO(file_bytes), dtype=str, nrows=nrows, sheet_name=sheet_name)
+                return df, 'Excel'
+            else:
+                from io import StringIO
+                df = pd.read_csv(StringIO(file_bytes.decode('utf-8')), sep=separator, dtype=str, nrows=nrows)
+                return df, 'CSV'
+        
+        # Load full file (cached)
+        @st.cache_data
+        def load_full_file(file_bytes, file_name, separator, sheet_name=None):
+            """Load complete file - only called when validation button is clicked"""
+            file_extension = file_name.split('.')[-1].lower()
             
-            # 1. Clean Data (Handle commas)
-            df_clean = df_full.copy()
-            def clean_coord(val):
-                if pd.isna(val): return np.nan
-                val = str(val).strip().replace(',', '.')
-                try:
-                    return float(val)
-                except:
-                    return np.nan
-
-            df_clean[x_col] = df_clean[x_col].apply(clean_coord)
-            df_clean[y_col] = df_clean[y_col].apply(clean_coord)
-
-            # 2. Categorize Data
-            # A. Empty/Null - Missing coordinates
-            empty_mask = df_clean[x_col].isna() | df_clean[y_col].isna()
+            if file_extension in ['xlsx', 'xls']:
+                from io import BytesIO
+                df = pd.read_excel(BytesIO(file_bytes), dtype=str, sheet_name=sheet_name)
+                return df, 'Excel'
+            else:
+                from io import StringIO
+                df = pd.read_csv(StringIO(file_bytes.decode('utf-8')), sep=separator, dtype=str)
+                return df, 'CSV'
+        
+        try:
+            csv_file.seek(0)
+            file_bytes = csv_file.read()
             
-            # B. Zero Coordinates (0,0) - Often default sensor values
-            zero_mask = (df_clean[x_col] == 0) & (df_clean[y_col] == 0)
+            # Check if Excel file with multiple sheets
+            file_extension = csv_file.name.split('.')[-1].lower()
+            selected_sheet = None
             
-            # C. Valid Range
-            # Valid range: Lon -180 to 180, Lat -90 to 90
-            valid_range_mask = (
-                (df_clean[x_col].between(-180, 180)) & 
-                (df_clean[y_col].between(-90, 90))
-            )
-            # Valid is in range AND not zero AND not empty
-            valid_mask = valid_range_mask & (~zero_mask) & (~empty_mask)
-
-            # D. Invalid - everything else (text, out of range, etc.)
-            # Create DataFrames
-            df_valid = df_clean[valid_mask].copy()
-            df_zero = df_full[zero_mask].copy()
-            df_empty = df_full[empty_mask].copy()
-            df_invalid = df_full[~(valid_mask | zero_mask | empty_mask)].copy()
-            
-            # Add diagnostic columns to invalid data
-            if not df_invalid.empty:
-                df_invalid['_validation_issue'] = ''
+            if file_extension in ['xlsx', 'xls']:
+                sheet_names = get_excel_sheets(file_bytes, csv_file.name)
                 
-                # Check each invalid row for reason
-                for idx in df_invalid.index:
-                    reasons = []
-                    x_val = df_clean.loc[idx, x_col]
-                    y_val = df_clean.loc[idx, y_col]
-                    
-                    if pd.isna(x_val) or pd.isna(y_val):
-                        reasons.append("Empty/Null value")
-                    elif not isinstance(x_val, (int, float)):
-                        reasons.append(f"Cannot convert to number")
-                    elif x_val < -180 or x_val > 180:
-                        reasons.append(f"Lon out of range ({x_val})")
-                    elif y_val < -90 or y_val > 90:
-                        reasons.append(f"Lat out of range ({y_val})")
-                    
-                    df_invalid.loc[idx, '_validation_issue'] = '; '.join(reasons) if reasons else 'Unknown'
+                if sheet_names and len(sheet_names) > 1:
+                    st.info(f"📊 This Excel file has {len(sheet_names)} sheets")
+                    selected_sheet = st.selectbox(
+                        "Select sheet to analyze:",
+                        options=sheet_names,
+                        index=0,
+                        key="sheet_selector"
+                    )
+                elif sheet_names:
+                    selected_sheet = sheet_names[0]
+            
+            # Load preview only for UI
+            df_preview, file_type = load_preview(file_bytes, csv_file.name, sep, sheet_name=selected_sheet, nrows=100)
+            
+            if selected_sheet:
+                st.success(f"✅ Loaded preview of {file_type} file: {csv_file.name} - Sheet: '{selected_sheet}' (showing first 100 rows for column selection)")
+            else:
+                st.success(f"✅ Loaded preview of {file_type} file: {csv_file.name} (showing first 100 rows for column selection)")
+            
+            st.info("💡 Full file will be processed when you click 'Validate Data Quality'")
+            
+            # Use preview for UI
+            df = df_preview
+        except Exception as e:
+            st.error(f"Error reading file: {e}")
+            st.stop()
+        
+        # --- Data Validation Preview ---
+        st.divider()
+        st.subheader("📋 Data Preview & Validation")
+        
+        with st.expander("📊 View Data Quality Summary", expanded=False):
+            col_a, col_b, col_c = st.columns(3)
+            col_a.metric("Total Rows", len(df))
+            col_b.metric("Total Columns", len(df.columns))
+            col_c.metric("File Size", f"{csv_file.size / (1024*1024):.2f} MB")
+            
+            st.write("**Column Names:**")
+            st.write(", ".join(df.columns.tolist()))
+            
+            st.write("**First 5 Rows:**")
+            st.dataframe(df.head(), use_container_width=True)
 
-            # Save validation results
-            st.session_state.validation_results = {
-                'df_valid': df_valid,
-                'df_invalid': df_invalid,
-                'df_zero': df_zero,
-                'df_empty': df_empty,
-                'df_raw_len': len(df_full),
-                'x_col': x_col,
-                'y_col': y_col,
-                'diagnostics': {
-                    'empty_count': empty_mask.sum(),
-                    'out_of_range_lon': ((df_clean[x_col] < -180) | (df_clean[x_col] > 180)).sum(),
-                    'out_of_range_lat': ((df_clean[y_col] < -90) | (df_clean[y_col] > 90)).sum()
+        # Column Selectors
+        columns = df.columns.tolist()
+        c1, c2 = st.columns(2)
+        with c1:
+            x_col = st.selectbox("Select X Column (Longitude)", options=columns, index=0, key="x_col_select")
+        with c2:
+            y_col = st.selectbox("Select Y Column (Latitude)", options=columns, index=1 if len(columns) > 1 else 0, key="y_col_select")
+        
+        if st.button("✅ Validate Data Quality", type="primary", use_container_width=True):
+            with st.spinner("Loading full file and analyzing coordinate quality..."):
+                
+                # Load FULL file now
+                df_full, _ = load_full_file(file_bytes, csv_file.name, sep, sheet_name=selected_sheet)
+                st.info(f"📊 Processing {len(df_full):,} total rows...")
+                
+                # 1. Clean Data (Handle commas)
+                df_clean = df_full.copy()
+                def clean_coord(val):
+                    if pd.isna(val): return np.nan
+                    val = str(val).strip().replace(',', '.')
+                    try:
+                        return float(val)
+                    except:
+                        return np.nan
+
+                df_clean[x_col] = df_clean[x_col].apply(clean_coord)
+                df_clean[y_col] = df_clean[y_col].apply(clean_coord)
+
+                # 2. Categorize Data
+                # A. Empty/Null - Missing coordinates
+                empty_mask = df_clean[x_col].isna() | df_clean[y_col].isna()
+                
+                # B. Zero Coordinates (0,0) - Often default sensor values
+                zero_mask = (df_clean[x_col] == 0) & (df_clean[y_col] == 0)
+                
+                # C. Valid Range
+                # Valid range: Lon -180 to 180, Lat -90 to 90
+                valid_range_mask = (
+                    (df_clean[x_col].between(-180, 180)) & 
+                    (df_clean[y_col].between(-90, 90))
+                )
+                # Valid is in range AND not zero AND not empty
+                valid_mask = valid_range_mask & (~zero_mask) & (~empty_mask)
+
+                # D. Invalid - everything else (text, out of range, etc.)
+                # Create DataFrames
+                df_valid = df_clean[valid_mask].copy()
+                df_zero = df_full[zero_mask].copy()
+                df_empty = df_full[empty_mask].copy()
+                df_invalid = df_full[~(valid_mask | zero_mask | empty_mask)].copy()
+                
+                # Add diagnostic columns to invalid data
+                if not df_invalid.empty:
+                    df_invalid['_validation_issue'] = ''
+                    
+                    # Check each invalid row for reason
+                    for idx in df_invalid.index:
+                        reasons = []
+                        x_val = df_clean.loc[idx, x_col]
+                        y_val = df_clean.loc[idx, y_col]
+                        
+                        if pd.isna(x_val) or pd.isna(y_val):
+                            reasons.append("Empty/Null value")
+                        elif not isinstance(x_val, (int, float)):
+                            reasons.append(f"Cannot convert to number")
+                        elif x_val < -180 or x_val > 180:
+                            reasons.append(f"Lon out of range ({x_val})")
+                        elif y_val < -90 or y_val > 90:
+                            reasons.append(f"Lat out of range ({y_val})")
+                        
+                        df_invalid.loc[idx, '_validation_issue'] = '; '.join(reasons) if reasons else 'Unknown'
+
+                # Save validation results
+                st.session_state.validation_results = {
+                    'df_valid': df_valid,
+                    'df_invalid': df_invalid,
+                    'df_zero': df_zero,
+                    'df_empty': df_empty,
+                    'df_raw_len': len(df_full),
+                    'x_col': x_col,
+                    'y_col': y_col,
+                    'diagnostics': {
+                        'empty_count': empty_mask.sum(),
+                        'out_of_range_lon': ((df_clean[x_col] < -180) | (df_clean[x_col] > 180)).sum(),
+                        'out_of_range_lat': ((df_clean[y_col] < -90) | (df_clean[y_col] > 90)).sum()
+                    }
                 }
-            }
-            st.success("✅ Data validation complete!")
-    
-    st.markdown('</div>', unsafe_allow_html=True)  # Close Step 2
+                st.success("✅ Data validation complete!")
     
     # --- Step 3: Spatial Analysis (Optional) ---
     if st.session_state.validation_results:
-        st.markdown('<div class="step-section step-3">', unsafe_allow_html=True)
-        st.markdown('<h3>🗺️ Step 3: Spatial Analysis (Optional)</h3>', unsafe_allow_html=True)
-        st.info("Upload a GeoJSON polygon to find which valid points are inside/outside the boundary.")
-        
-        geojson_file = st.file_uploader("Upload GeoJSON (Polygon) - Optional", type=['geojson', 'json'])
-        
-        if geojson_file is not None:
-            if st.button("🎯 Run Spatial Analysis", type="secondary", use_container_width=True):
-                with st.spinner("Analyzing spatial relationships..."):
-                    # Load GeoJSON
-                    try:
-                        gdf_polygon = gpd.read_file(geojson_file)
-                        if gdf_polygon.crs is not None:
-                            gdf_polygon = gdf_polygon.to_crs(epsg=4326)
+        with st.container():
+            st.markdown('<h3>🗺️ Step 3: Spatial Analysis (Optional)</h3>', unsafe_allow_html=True)
+            st.info("Upload a GeoJSON polygon to find which valid points are inside/outside the boundary.")
+            
+            geojson_file = st.file_uploader("Upload GeoJSON (Polygon) - Optional", type=['geojson', 'json'])
+            
+            if geojson_file is not None:
+                if st.button("🎯 Run Spatial Analysis", type="secondary", use_container_width=True):
+                    with st.spinner("Analyzing spatial relationships..."):
+                        # Load GeoJSON
+                        try:
+                            gdf_polygon = gpd.read_file(geojson_file)
+                            if gdf_polygon.crs is not None:
+                                gdf_polygon = gdf_polygon.to_crs(epsg=4326)
+                            else:
+                                gdf_polygon.set_crs(epsg=4326, inplace=True)
+                        except Exception as e:
+                            st.error(f"Error reading GeoJSON: {e}")
+                            st.stop()
+                        
+                        # Get validation results
+                        val_res = st.session_state.validation_results
+                        df_valid = val_res['df_valid']
+                        x_col = val_res['x_col']
+                        y_col = val_res['y_col']
+                        
+                        # Spatial Join
+                        if not df_valid.empty:
+                            geometry = [Point(xy) for xy in zip(df_valid[x_col], df_valid[y_col])]
+                            gdf_points = gpd.GeoDataFrame(df_valid, geometry=geometry, crs="EPSG:4326")
+                            
+                            polygon_union = gdf_polygon.unary_union
+                            gdf_points['location_status'] = gdf_points.geometry.within(polygon_union).map({True: 'Inside', False: 'Outside'})
+                            
+                            # Save spatial results
+                            st.session_state.spatial_results = {
+                                'gdf_points': gdf_points,
+                                'gdf_polygon': gdf_polygon
+                            }
+                            st.success("✅ Spatial analysis complete!")
                         else:
-                            gdf_polygon.set_crs(epsg=4326, inplace=True)
-                    except Exception as e:
-                        st.error(f"Error reading GeoJSON: {e}")
-                        st.stop()
-                    
-                    # Get validation results
-                    val_res = st.session_state.validation_results
-                    df_valid = val_res['df_valid']
-                    x_col = val_res['x_col']
-                    y_col = val_res['y_col']
-                    
-                    # Spatial Join
-                    if not df_valid.empty:
-                        geometry = [Point(xy) for xy in zip(df_valid[x_col], df_valid[y_col])]
-                        gdf_points = gpd.GeoDataFrame(df_valid, geometry=geometry, crs="EPSG:4326")
-                        
-                        polygon_union = gdf_polygon.unary_union
-                        gdf_points['location_status'] = gdf_points.geometry.within(polygon_union).map({True: 'Inside', False: 'Outside'})
-                        
-                        # Save spatial results
-                        st.session_state.spatial_results = {
-                            'gdf_points': gdf_points,
-                            'gdf_polygon': gdf_polygon
-                        }
-                        st.success("✅ Spatial analysis complete!")
-                    else:
-                        st.error("No valid coordinates to analyze spatially.")
-        
-        st.markdown('</div>', unsafe_allow_html=True)  # Close Step 3
+                            st.error("No valid coordinates to analyze spatially.")
 
 # --- Results Section (White Background) ---
 if st.session_state.validation_results:
