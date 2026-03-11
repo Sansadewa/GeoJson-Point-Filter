@@ -11,3 +11,6 @@ __pycache__/
 *.pyzzzz
 *.pyzzzzz
 *.pyzzzzzz
+.streamlit/secrets.toml
+polygons/
+*.geojson
