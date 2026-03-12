@@ -114,9 +114,9 @@ def fetch_sbr_data(
     """
     Fetch rows from the sbr_data table filtered by region codes.
 
-    Filtering is applied server-side; only matching rows are transferred.
-    The caller must have increased the Supabase PostgREST row limit
-    beyond the default 1 000 if large result sets are expected.
+    Uses paginated requests (1 000 rows each) to work around the
+    PostgREST default row-limit, so the full result set is always
+    returned regardless of size.
 
     Args:
         kdprov:  Province code (required)
@@ -128,21 +128,34 @@ def fetch_sbr_data(
         pandas DataFrame with all sbr_data columns. Empty DataFrame on
         error or when no rows match.
     """
+    PAGE_SIZE = 1_000
     try:
         client = get_client()
-        query = client.table("sbr_data").select("*").eq("kdprov", kdprov)
-        if kdkab:
-            query = query.eq("kdkab", kdkab)
-        if kdkec:
-            query = query.eq("kdkec", kdkec)
-        if kddesa:
-            query = query.eq("kddesa", kddesa)
 
-        result = query.execute()
-        if not result.data:
+        def _base_query():
+            q = client.table("sbr_data").select("*").eq("kdprov", kdprov)
+            if kdkab:
+                q = q.eq("kdkab", kdkab)
+            if kdkec:
+                q = q.eq("kdkec", kdkec)
+            if kddesa:
+                q = q.eq("kddesa", kddesa)
+            return q
+
+        all_rows = []
+        offset = 0
+        while True:
+            result = _base_query().range(offset, offset + PAGE_SIZE - 1).execute()
+            batch = result.data or []
+            all_rows.extend(batch)
+            if len(batch) < PAGE_SIZE:
+                break
+            offset += PAGE_SIZE
+
+        if not all_rows:
             return pd.DataFrame()
 
-        return pd.DataFrame(result.data)
+        return pd.DataFrame(all_rows)
 
     except Exception as e:
         st.error(f"Failed to fetch sbr_data: {e}")

@@ -372,7 +372,7 @@ if df is not None:
         ca, cb = st.columns(2)
         ca.metric("Rows", f"{len(df):,}")
         cb.metric("Columns", len(df.columns))
-        st.dataframe(df.head(), use_container_width=True)
+        st.dataframe(df.head(), width="stretch")
 
 _section_end()
 
@@ -409,7 +409,7 @@ if df is not None and x_col and y_col:
 
         if st.button(
             "🚀 Run Spatial Analysis", type="primary",
-            use_container_width=True, key="process_btn"
+            key="process_btn"
         ):
             with st.spinner("Validating coordinates and fetching boundary…"):
 
@@ -564,7 +564,7 @@ if st.session_state.validation_results:
                 all_valid[all_valid["location_status"] == "Outside"] if filt == "Outside Only" else
                 all_valid
             )
-            st.dataframe(show, use_container_width=True)
+            st.dataframe(show, width="stretch")
             st.download_button(
                 "⬇️ Download All Valid",
                 all_valid.to_csv(index=False).encode(),
@@ -578,7 +578,7 @@ if st.session_state.validation_results:
             st.markdown(
                 "These have valid coordinates but lie outside the selected region polygon."
             )
-            st.dataframe(outside, use_container_width=True)
+            st.dataframe(outside, width="stretch")
             if not outside.empty:
                 st.download_button(
                     "⬇️ Download Outside Points",
@@ -590,7 +590,7 @@ if st.session_state.validation_results:
         with tab4:
             st.warning(f"{len(df_zero):,} rows with exactly (0, 0) coordinates")
             st.markdown("These often indicate missing GPS data.")
-            st.dataframe(df_zero, use_container_width=True)
+            st.dataframe(df_zero, width="stretch")
             if not df_zero.empty:
                 st.download_button(
                     "⬇️ Download Zero Rows",
@@ -601,7 +601,7 @@ if st.session_state.validation_results:
         # ---- Empty ----
         with tab5:
             st.info(f"{len(df_empty):,} rows with empty/null coordinates")
-            st.dataframe(df_empty, use_container_width=True)
+            st.dataframe(df_empty, width="stretch")
             if not df_empty.empty:
                 st.download_button(
                     "⬇️ Download Empty Rows",
@@ -617,7 +617,7 @@ if st.session_state.validation_results:
                 d1, d2 = st.columns(2)
                 d1.metric("Lon out of range", diag["out_of_range_lon"], help="Valid: −180 to 180")
                 d2.metric("Lat out of range", diag["out_of_range_lat"], help="Valid: −90 to 90")
-            st.dataframe(df_invalid, use_container_width=True)
+            st.dataframe(df_invalid, width="stretch")
             if not df_invalid.empty:
                 st.download_button(
                     "⬇️ Download Invalid Rows",
@@ -650,7 +650,7 @@ if st.session_state.validation_results:
 
         with tab2:
             st.success(f"Valid coordinate data — {len(df_valid):,} rows")
-            st.dataframe(df_valid, use_container_width=True)
+            st.dataframe(df_valid, width="stretch")
             if not df_valid.empty:
                 st.download_button(
                     "⬇️ Download Valid Data",
@@ -660,7 +660,7 @@ if st.session_state.validation_results:
 
         with tab4:
             st.warning(f"{len(df_zero):,} rows with (0, 0) coordinates")
-            st.dataframe(df_zero, use_container_width=True)
+            st.dataframe(df_zero, width="stretch")
             if not df_zero.empty:
                 st.download_button(
                     "⬇️ Download Zero Rows",
@@ -670,7 +670,7 @@ if st.session_state.validation_results:
 
         with tab5:
             st.info(f"{len(df_empty):,} rows with empty/null coordinates")
-            st.dataframe(df_empty, use_container_width=True)
+            st.dataframe(df_empty, width="stretch")
             if not df_empty.empty:
                 st.download_button(
                     "⬇️ Download Empty Rows",
@@ -693,7 +693,7 @@ if st.session_state.validation_results:
                 - **Text values** — Non-numeric data in coordinate columns
                 """)
             st.markdown("---")
-            st.dataframe(df_invalid, use_container_width=True)
+            st.dataframe(df_invalid, width="stretch")
             if not df_invalid.empty:
                 st.download_button(
                     "⬇️ Download Invalid Rows",
