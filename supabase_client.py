@@ -110,7 +110,7 @@ def fetch_sbr_data(
     kdkab:  str | None = None,
     kdkec:  str | None = None,
     kddesa: str | None = None,
-) -> pd.DataFrame:
+) -> tuple[pd.DataFrame, int]:
     """
     Fetch rows from the sbr_data table filtered by region codes.
 
@@ -125,8 +125,8 @@ def fetch_sbr_data(
         kddesa:  Desa code      (optional)
 
     Returns:
-        pandas DataFrame with all sbr_data columns. Empty DataFrame on
-        error or when no rows match.
+        Tuple of (DataFrame, total_count). Empty DataFrame with count 0
+        on error or when no rows match.
     """
     PAGE_SIZE = 1_000
     try:
@@ -153,10 +153,10 @@ def fetch_sbr_data(
             offset += PAGE_SIZE
 
         if not all_rows:
-            return pd.DataFrame()
+            return pd.DataFrame(), 0
 
-        return pd.DataFrame(all_rows)
+        return pd.DataFrame(all_rows), len(all_rows)
 
     except Exception as e:
         st.error(f"Failed to fetch sbr_data: {e}")
-        return pd.DataFrame()
+        return pd.DataFrame(), 0

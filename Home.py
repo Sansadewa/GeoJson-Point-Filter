@@ -465,7 +465,7 @@ with col_step1:
             if st.button("📥 Fetch Data from Database", type="primary",
                          use_container_width=True, key="fetch_btn"):
                 with st.spinner("Fetching data…"):
-                    fetched = fetch_sbr_data(
+                    fetched, total_count = fetch_sbr_data(
                         kdprov=data_sel["kdprov"],
                         kdkab=data_sel["kdkab"],
                         kdkec=data_sel["kdkec"],
@@ -482,7 +482,7 @@ with col_step1:
                         st.session_state.db_x_col = xc
                         st.session_state.db_y_col = yc
                         st.success(
-                            f"✅ Fetched **{len(fetched):,}** rows "
+                            f"✅ Fetched **{total_count:,}** rows "
                             f"(coords: {xc} / {yc})"
                         )
 
@@ -588,6 +588,7 @@ with col_step2:
                             st.success(
                                 f"✅ Done — {inside:,} inside | {outside:,} outside"
                             )
+                            st.warning(f"🔴 Outside boundary: **{outside:,}**")
                         else:
                             st.warning("No valid coordinates to analyse spatially.")
 
