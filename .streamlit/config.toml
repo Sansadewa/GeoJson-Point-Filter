@@ -2,4 +2,4 @@
 maxUploadSize = 500
 
 [theme]
-base = "light"
+base = "dark"

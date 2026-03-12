@@ -15,6 +15,31 @@ from supabase_client import fetch_regions, fetch_boundary, fetch_sbr_data
 # ---------------------------------------------------------------------------
 st.set_page_config(page_title="Geo Spatial Filter", layout="wide")
 
+# Global CSS — green Run button, full-width buttons
+st.markdown(
+    """
+    <style>
+    /* Full-width for all primary buttons */
+    div[data-testid="stButton"] > button {
+        width: 100%;
+    }
+    /* Green colour for the Run Spatial Analysis button */
+    div[data-testid="stButton"][id="run_btn_container"] > button,
+    button[kind="primary"]#run_spatial_btn {
+        background-color: #27ae60 !important;
+        border-color: #27ae60 !important;
+        color: #ffffff !important;
+    }
+    /* Target by key — Streamlit wraps button in a div whose child has data-testid */
+    div:has(> button[kind="primary"]) button[kind="primary"].st-key-run_spatial_btn {
+        background-color: #27ae60 !important;
+        border-color: #27ae60 !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 st.title("📍 GeoJSON vs. CSV Point Analyzer")
 st.markdown(
     "Validate coordinate data and run spatial inside/outside analysis against "
@@ -35,6 +60,27 @@ def clean_coord(val):
         return float(val)
     except Exception:
         return np.nan
+
+
+def _best_coord_col(cols: list[str], kind: str) -> int:
+    """
+    Return the list index of the best coordinate column for *kind*
+    ('lon' or 'lat'), preferring _gc suffix variants.
+
+    Priority for lon: longitude_gc → longitude → lon → index 0
+    Priority for lat: latitude_gc  → latitude  → lat → index 1
+    """
+    cols_lower = [c.lower() for c in cols]
+    if kind == "lon":
+        candidates = ["longitude_gc", "longitude", "lon"]
+        fallback = 0
+    else:
+        candidates = ["latitude_gc", "latitude", "lat"]
+        fallback = min(1, len(cols) - 1)
+    for c in candidates:
+        if c in cols_lower:
+            return cols_lower.index(c)
+    return fallback
 
 
 def run_validation(df: pd.DataFrame, x_col: str, y_col: str) -> dict:
@@ -88,7 +134,7 @@ def run_validation(df: pd.DataFrame, x_col: str, y_col: str) -> dict:
         "x_col":      x_col,
         "y_col":      y_col,
         "diagnostics": {
-            "empty_count":     int(empty_mask.sum()),
+            "empty_count":      int(empty_mask.sum()),
             "out_of_range_lon": int(((df_clean[x_col] < -180) | (df_clean[x_col] > 180)).sum()),
             "out_of_range_lat": int(((df_clean[y_col] < -90)  | (df_clean[y_col] > 90)).sum()),
         },
@@ -106,7 +152,7 @@ def run_spatial_analysis(df_valid: pd.DataFrame, x_col: str, y_col: str,
     if df_valid.empty:
         return None
 
-    geometry  = [Point(xy) for xy in zip(df_valid[x_col], df_valid[y_col])]
+    geometry   = [Point(xy) for xy in zip(df_valid[x_col], df_valid[y_col])]
     gdf_points = gpd.GeoDataFrame(df_valid, geometry=geometry, crs="EPSG:4326")
 
     union = gdf_boundary.unary_union
@@ -117,47 +163,59 @@ def run_spatial_analysis(df_valid: pd.DataFrame, x_col: str, y_col: str,
     return {"gdf_points": gdf_points, "gdf_polygon": gdf_boundary}
 
 
-def _label_col(df: pd.DataFrame, x_col: str, y_col: str) -> str | None:
+def _make_popup(row, status: str) -> str:
     """
-    Return the name column to use for map popups.
-
-    Preference order:
-      1. 'nama_usaha' if it exists
-      2. First object/string column that is not a coordinate column
-      3. None if nothing suitable found
+    Build an HTML popup for a map marker showing:
+      - nama_usaha  (bold header, if present)
+      - gc_username (if present)
+      - kegiatan_usaha (if present)
+      - location status
+    Falls back gracefully when columns are absent.
     """
-    if "nama_usaha" in df.columns:
-        return "nama_usaha"
-    skip = {x_col, y_col, "geometry", "location_status", "_validation_issue"}
-    for col in df.columns:
-        if col not in skip and pd.api.types.is_object_dtype(df[col]):
-            return col
-    return None
+    lines = []
 
+    # Business name — bold header
+    nama = row.get("nama_usaha") if hasattr(row, "get") else (
+        row["nama_usaha"] if "nama_usaha" in row.index else None
+    )
+    if nama is not None and pd.notna(nama) and str(nama).strip():
+        lines.append(f"<b>{nama}</b>")
 
-def _make_popup(row, label_col: str | None, status: str) -> str:
-    """Build a compact HTML popup string for a map marker."""
-    parts = []
-    if label_col and label_col in row.index and pd.notna(row[label_col]):
-        parts.append(f"<b>{row[label_col]}</b>")
-    parts.append(f"Status: <b>{status}</b>")
-    return "<br>".join(parts)
+    # GC username
+    gc_user = None
+    if "gc_username" in row.index:
+        gc_user = row["gc_username"]
+    if gc_user is not None and pd.notna(gc_user) and str(gc_user).strip():
+        lines.append(f"👤 {gc_user}")
+
+    # Business activity
+    kegiatan = None
+    if "kegiatan_usaha" in row.index:
+        kegiatan = row["kegiatan_usaha"]
+    if kegiatan is not None and pd.notna(kegiatan) and str(kegiatan).strip():
+        lines.append(f"🏭 {kegiatan}")
+
+    # Location status — always shown
+    color_tag = "#27ae60" if status == "Inside" else "#e74c3c"
+    lines.append(f"<span style='color:{color_tag};font-weight:600;'>{status}</span>")
+
+    return "<br>".join(lines)
 
 
 # ---------------------------------------------------------------------------
 # UI helpers
 # ---------------------------------------------------------------------------
 
-def _section(title: str, color_left: str, color_bg: str):
-    """Render a styled section header div (opening tag only)."""
+def _section(title: str, color_left: str):
+    """Render a styled section header div (dark-theme safe, opening tag only)."""
     st.markdown(
-        f"""<div style="background: linear-gradient(to right, {color_bg} 0%, #fafafa 100%);
-                       border-left: 10px solid {color_left};
-                       padding: 25px 25px 25px 30px;
-                       border-radius: 10px;
-                       margin: 20px 0;
-                       box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-            <h3 style="color: #2c3e50; margin-top: 0; font-weight: 600;">{title}</h3>""",
+        f"""<div style="border-left: 6px solid {color_left};
+                       padding: 18px 20px 18px 24px;
+                       border-radius: 8px;
+                       margin: 12px 0 16px 0;
+                       background: rgba(255,255,255,0.04);
+                       box-shadow: 0 2px 8px rgba(0,0,0,0.25);">
+            <h3 style="margin-top: 0; font-weight: 600;">{title}</h3>""",
         unsafe_allow_html=True,
     )
 
@@ -239,10 +297,10 @@ def render_region_selector(key_prefix: str) -> dict:
 def region_label(sel: dict) -> str:
     """Return a human-readable breadcrumb for the selected region."""
     level_names = {
-        "kdprov":  "Prov",
-        "kdkab":   "Kab",
-        "kdkec":   "Kec",
-        "kddesa":  "Desa",
+        "kdprov": "Prov",
+        "kdkab":  "Kab",
+        "kdkec":  "Kec",
+        "kddesa": "Desa",
     }
     parts = [f"{lbl}: {sel[k]}" for k, lbl in level_names.items() if sel[k]]
     return " › ".join(parts) if parts else "—"
@@ -251,14 +309,6 @@ def region_label(sel: dict) -> str:
 # ---------------------------------------------------------------------------
 # Streamlit cached file loaders (keyed on bytes so cache survives reruns)
 # ---------------------------------------------------------------------------
-
-@st.cache_data
-def _load_upload(file_bytes: bytes, file_name: str, separator: str) -> pd.DataFrame:
-    ext = file_name.rsplit(".", 1)[-1].lower()
-    if ext in ("xlsx", "xls"):
-        return pd.read_excel(BytesIO(file_bytes), dtype=str)
-    return pd.read_csv(StringIO(file_bytes.decode("utf-8")), sep=separator, dtype=str)
-
 
 @st.cache_data
 def _get_excel_sheets(file_bytes: bytes, file_name: str) -> list[str] | None:
@@ -281,16 +331,15 @@ def _load_upload_sheet(file_bytes: bytes, file_name: str, separator: str,
 # ---------------------------------------------------------------------------
 # Session state initialisation
 # ---------------------------------------------------------------------------
-for key in ("validation_results", "spatial_results", "db_df",
-            "db_x_col", "db_y_col"):
-    if key not in st.session_state:
-        st.session_state[key] = None
+for _key in ("validation_results", "spatial_results", "db_df", "db_x_col", "db_y_col"):
+    if _key not in st.session_state:
+        st.session_state[_key] = None
 
 
 # ===========================================================================
-# STEP 1 + STEP 2 — side by side (60 / 40)
+# STEP 1 | gap | STEP 2  —  side by side  (55% | 5% | 40%)
 # ===========================================================================
-col_step1, col_step2 = st.columns([3, 2])
+col_step1, col_gap, col_step2 = st.columns([55, 5, 40])
 
 df    = None
 x_col = None
@@ -298,10 +347,10 @@ y_col = None
 sep   = ","
 
 # ---------------------------------------------------------------------------
-# LEFT COLUMN — Step 1: Data Source
+# LEFT — Step 1: Select Data Source
 # ---------------------------------------------------------------------------
 with col_step1:
-    _section("📂 Step 1: Select Data Source", "#667eea", "#f0ebff")
+    _section("📂 Step 1: Select Data Source", "#667eea")
 
     data_source = st.radio(
         "How would you like to provide coordinate data?",
@@ -327,9 +376,9 @@ with col_step1:
                         key="sep_select",
                     )
                     sep = (
-                        ","  if sep_opt == "Comma (,)"    else
+                        ","  if sep_opt == "Comma (,)"     else
                         ";"  if sep_opt == "Semicolon (;)" else
-                        "\t" if sep_opt == "Tab (\\t)"    else
+                        "\t" if sep_opt == "Tab (\\t)"     else
                         "|"  if sep_opt == "Pipe (|)"      else
                         st.text_input("Custom delimiter", value=",")
                     )
@@ -353,19 +402,18 @@ with col_step1:
                 df = _load_upload_sheet(file_bytes, csv_file.name, sep, selected_sheet)
                 st.success(f"✅ Loaded **{len(df):,}** rows from {csv_file.name}")
 
-                # Column selectors
+                # Column selectors — prefer _gc suffix variants
                 cols = df.columns.tolist()
+                x_idx = _best_coord_col(cols, "lon")
+                y_idx = _best_coord_col(cols, "lat")
                 c1, c2 = st.columns(2)
                 with c1:
                     x_col = st.selectbox(
-                        "Longitude column (X)", cols, index=0, key="upload_x"
+                        "Longitude column (X)", cols, index=x_idx, key="upload_x"
                     )
                 with c2:
                     y_col = st.selectbox(
-                        "Latitude column (Y)",
-                        cols,
-                        index=min(1, len(cols) - 1),
-                        key="upload_y",
+                        "Latitude column (Y)", cols, index=y_idx, key="upload_y"
                     )
 
             except Exception as e:
@@ -377,7 +425,8 @@ with col_step1:
         data_sel = render_region_selector("data")
 
         if data_sel["kdprov"]:
-            if st.button("📥 Fetch Data from Database", type="primary", key="fetch_btn"):
+            if st.button("📥 Fetch Data from Database", type="primary",
+                         use_container_width=True, key="fetch_btn"):
                 with st.spinner("Fetching data…"):
                     fetched = fetch_sbr_data(
                         kdprov=data_sel["kdprov"],
@@ -388,10 +437,17 @@ with col_step1:
                     if fetched.empty:
                         st.warning("No rows found for the selected region.")
                     else:
+                        # Prefer GC coordinates; fall back to raw coordinates
+                        cols = fetched.columns.tolist()
+                        xc = cols[_best_coord_col(cols, "lon")]
+                        yc = cols[_best_coord_col(cols, "lat")]
                         st.session_state.db_df    = fetched
-                        st.session_state.db_x_col = "longitude"
-                        st.session_state.db_y_col = "latitude"
-                        st.success(f"✅ Fetched **{len(fetched):,}** rows")
+                        st.session_state.db_x_col = xc
+                        st.session_state.db_y_col = yc
+                        st.success(
+                            f"✅ Fetched **{len(fetched):,}** rows "
+                            f"(coords: {xc} / {yc})"
+                        )
 
         # Persist fetched data across reruns
         if st.session_state.db_df is not None:
@@ -399,7 +455,7 @@ with col_step1:
             x_col = st.session_state.db_x_col
             y_col = st.session_state.db_y_col
 
-    # Compact data preview (inside Step 1 column)
+    # Compact data preview
     if df is not None:
         with st.expander("📊 Data Preview", expanded=False):
             ca, cb = st.columns(2)
@@ -411,10 +467,17 @@ with col_step1:
 
 
 # ---------------------------------------------------------------------------
-# RIGHT COLUMN — Step 2: Region Boundary
+# GAP column — intentionally empty
+# ---------------------------------------------------------------------------
+with col_gap:
+    pass
+
+
+# ---------------------------------------------------------------------------
+# RIGHT — Step 2: Region Boundary + Run Analysis
 # ---------------------------------------------------------------------------
 with col_step2:
-    _section("🗺️ Step 2: Select Region Boundary", "#00f2fe", "#e6f9ff")
+    _section("🗺️ Step 2: Select Region Boundary", "#00c9a7")
 
     if df is None or not x_col or not y_col:
         st.info("Load data in Step 1 first.")
@@ -428,76 +491,78 @@ with col_step2:
         if boundary_sel["kdprov"]:
             st.info(f"Selected: **{region_label(boundary_sel)}**")
 
-    _section_end()
-
-
-# ===========================================================================
-# STEP 3 — PROCESS  (full width, below the two columns)
-# ===========================================================================
-if df is not None and x_col and y_col and boundary_sel["kdprov"]:
-    _section("⚙️ Step 3: Process", "#f5576c", "#fff0f6")
-
-    st.markdown(
-        f"**Data:** {len(df):,} rows &nbsp;|&nbsp; "
-        f"**Boundary:** {region_label(boundary_sel)}"
-    )
-
-    if st.button(
-        "🚀 Run Spatial Analysis", type="primary",
-        key="process_btn"
-    ):
-        with st.spinner("Validating coordinates and fetching boundary…"):
-
-            # 1. Validate
-            validation = run_validation(df, x_col, y_col)
-            st.session_state.validation_results = validation
-
-            v = validation
-            st.info(
-                f"📊 Validation — "
-                f"✅ Valid: {len(v['df_valid']):,} | "
-                f"❌ Invalid: {len(v['df_invalid']):,} | "
-                f"0️⃣ Zero: {len(v['df_zero']):,} | "
-                f"📭 Empty: {len(v['df_empty']):,}"
+        # Run Spatial Analysis button lives here in Step 2
+        if boundary_sel["kdprov"]:
+            st.markdown(
+                """<style>
+                div[data-testid="stButton"]:has(button.st-key-run_spatial_btn) button {
+                    background-color: #27ae60 !important;
+                    border-color: #1e8449 !important;
+                    color: #ffffff !important;
+                }
+                </style>""",
+                unsafe_allow_html=True,
+            )
+            run_clicked = st.button(
+                "🚀 Run Spatial Analysis",
+                type="primary",
+                use_container_width=True,
+                key="run_spatial_btn",
             )
 
-            # 2. Fetch boundary
-            gdf_boundary = fetch_boundary(
-                kdprov=boundary_sel["kdprov"],
-                kdkab=boundary_sel["kdkab"],
-                kdkec=boundary_sel["kdkec"],
-                kddesa=boundary_sel["kddesa"],
-            )
+            if run_clicked:
+                with st.spinner("Validating coordinates and fetching boundary…"):
 
-            if gdf_boundary is None or gdf_boundary.empty:
-                st.error("Could not load boundary for the selected region.")
-                st.session_state.spatial_results = None
-            else:
-                # 3. Spatial analysis
-                spatial = run_spatial_analysis(
-                    v["df_valid"], x_col, y_col, gdf_boundary
-                )
-                st.session_state.spatial_results = spatial
+                    # 1. Validate
+                    validation = run_validation(df, x_col, y_col)
+                    st.session_state.validation_results = validation
 
-                if spatial:
-                    pts = spatial["gdf_points"]
-                    inside  = int((pts["location_status"] == "Inside").sum())
-                    outside = int((pts["location_status"] == "Outside").sum())
-                    st.success(
-                        f"✅ Done — {inside:,} inside | {outside:,} outside"
+                    v = validation
+                    st.info(
+                        f"📊 Validation — "
+                        f"✅ Valid: {len(v['df_valid']):,} | "
+                        f"❌ Invalid: {len(v['df_invalid']):,} | "
+                        f"0️⃣ Zero: {len(v['df_zero']):,} | "
+                        f"📭 Empty: {len(v['df_empty']):,}"
                     )
-                else:
-                    st.warning("No valid coordinates to analyse spatially.")
+
+                    # 2. Fetch boundary
+                    gdf_boundary = fetch_boundary(
+                        kdprov=boundary_sel["kdprov"],
+                        kdkab=boundary_sel["kdkab"],
+                        kdkec=boundary_sel["kdkec"],
+                        kddesa=boundary_sel["kddesa"],
+                    )
+
+                    if gdf_boundary is None or gdf_boundary.empty:
+                        st.error("Could not load boundary for the selected region.")
+                        st.session_state.spatial_results = None
+                    else:
+                        # 3. Spatial analysis
+                        spatial = run_spatial_analysis(
+                            v["df_valid"], x_col, y_col, gdf_boundary
+                        )
+                        st.session_state.spatial_results = spatial
+
+                        if spatial:
+                            pts     = spatial["gdf_points"]
+                            inside  = int((pts["location_status"] == "Inside").sum())
+                            outside = int((pts["location_status"] == "Outside").sum())
+                            st.success(
+                                f"✅ Done — {inside:,} inside | {outside:,} outside"
+                            )
+                        else:
+                            st.warning("No valid coordinates to analyse spatially.")
 
     _section_end()
 
 
 # ===========================================================================
-# RESULTS
+# STEP 3 — RESULT
 # ===========================================================================
 if st.session_state.validation_results:
     st.markdown("---")
-    st.markdown("### 📊 Results")
+    _section("📊 Step 3: Result", "#f39c12")
 
     val_res     = st.session_state.validation_results
     spatial_res = st.session_state.spatial_results
@@ -531,36 +596,36 @@ if st.session_state.validation_results:
             m = folium.Map(
                 location=[center_lat, center_lon],
                 zoom_start=12,
-                tiles="CartoDB positron",
+                tiles="CartoDB dark_matter",
             )
             folium.GeoJson(
                 gdf_polygon,
                 style_function=lambda _: {
-                    "fillColor": "blue", "color": "blue", "fillOpacity": 0.1
+                    "fillColor": "#3498db",
+                    "color": "#5dade2",
+                    "weight": 2,
+                    "fillOpacity": 0.08,
                 },
             ).add_to(m)
 
-            # Determine the label column for popups
-            lbl_col = _label_col(gdf_points.drop(columns="geometry"), xc, yc)
-
-            n = len(gdf_points)
+            n          = len(gdf_points)
             SAMPLE_MAX = 5_000
 
             if n < 500:
-                # All individual markers — no clustering needed
+                # All individual markers
                 for _, row in gdf_points.iterrows():
                     status = row["location_status"]
                     color  = "#2ecc71" if status == "Inside" else "#e74c3c"
                     folium.CircleMarker(
                         location=[row[yc], row[xc]],
-                        radius=4, color=color, fill=True,
-                        fill_color=color, fill_opacity=0.8,
-                        popup=folium.Popup(_make_popup(row, lbl_col, status), max_width=300),
+                        radius=5, color=color, fill=True,
+                        fill_color=color, fill_opacity=0.85,
+                        popup=folium.Popup(_make_popup(row, status), max_width=280),
                     ).add_to(m)
                 st.success(f"✅ {n:,} individual markers")
 
             elif n < 10_000:
-                # All points with separate Inside / Outside clusters
+                # All points, separate Inside / Outside clusters
                 st.info(f"📍 {n:,} points with clustering")
                 cl_in  = MarkerCluster(name="Inside").add_to(m)
                 cl_out = MarkerCluster(name="Outside").add_to(m)
@@ -570,34 +635,31 @@ if st.session_state.validation_results:
                     target = cl_in if status == "Inside" else cl_out
                     folium.CircleMarker(
                         location=[row[yc], row[xc]],
-                        radius=4, color=color, fill=True,
-                        fill_color=color, fill_opacity=0.8,
-                        popup=folium.Popup(_make_popup(row, lbl_col, status), max_width=300),
+                        radius=5, color=color, fill=True,
+                        fill_color=color, fill_opacity=0.85,
+                        popup=folium.Popup(_make_popup(row, status), max_width=280),
                     ).add_to(target)
                 folium.LayerControl().add_to(m)
 
             else:
-                # Large dataset: always show ALL outside points first,
-                # then fill remaining budget with a sample of inside points.
+                # Large dataset: all Outside first, then fill with sampled Inside
                 df_outside = gdf_points[gdf_points["location_status"] == "Outside"]
                 df_inside  = gdf_points[gdf_points["location_status"] == "Inside"]
                 n_outside  = len(df_outside)
                 inside_budget = max(0, SAMPLE_MAX - n_outside)
 
-                if inside_budget > 0 and len(df_inside) > inside_budget:
+                if len(df_inside) > inside_budget:
                     df_inside_show = df_inside.sample(n=inside_budget, random_state=42)
-                    sampled_inside = len(df_inside_show)
                 else:
                     df_inside_show = df_inside
-                    sampled_inside = len(df_inside)
 
-                display = pd.concat([df_outside, df_inside_show])
+                display     = pd.concat([df_outside, df_inside_show])
                 total_shown = len(display)
 
-                if len(df_inside) > inside_budget and inside_budget >= 0:
+                if len(df_inside) > inside_budget:
                     st.warning(
                         f"⚠️ {n:,} total points — showing all {n_outside:,} outside "
-                        f"+ {sampled_inside:,} sampled inside "
+                        f"+ {len(df_inside_show):,} sampled inside "
                         f"({total_shown:,} markers total)."
                     )
                 else:
@@ -611,14 +673,14 @@ if st.session_state.validation_results:
                     target = cl_in if status == "Inside" else cl_out
                     folium.CircleMarker(
                         location=[row[yc], row[xc]],
-                        radius=3, color=color, fill=True,
-                        fill_color=color, fill_opacity=0.7,
-                        popup=folium.Popup(_make_popup(row, lbl_col, status), max_width=300),
+                        radius=4, color=color, fill=True,
+                        fill_color=color, fill_opacity=0.8,
+                        popup=folium.Popup(_make_popup(row, status), max_width=280),
                     ).add_to(target)
                 folium.LayerControl().add_to(m)
 
-            # returned_objects=[] prevents Streamlit reruns on pan/zoom
-            st_folium(m, width=None, height=500, key="main_map", returned_objects=[])
+            # returned_objects=[] prevents reruns on pan/zoom
+            st_folium(m, width=None, height=520, key="main_map", returned_objects=[])
             st.markdown(
                 "**Legend:** 🟢 Inside boundary &nbsp; 🔴 Outside boundary "
                 "&nbsp; 🔵 Region polygon"
@@ -703,14 +765,14 @@ if st.session_state.validation_results:
             inside_n  = int((gdf_points["location_status"] == "Inside").sum())
             outside_n = int((gdf_points["location_status"] == "Outside").sum())
             c1, c2, c3, c4, c5, c6 = st.columns(6)
-            c1.metric("Valid",         f"{len(gdf_points):,}")
-            c2.metric("✅ Inside",     f"{inside_n:,}")
-            c3.metric("🔴 Outside",    f"{outside_n:,}")
-            c4.metric("Zero (0,0)",    f"{len(df_zero):,}")
-            c5.metric("Empty/Null",    f"{len(df_empty):,}")
-            c6.metric("Invalid",       f"{len(df_invalid):,}")
+            c1.metric("Valid",       f"{len(gdf_points):,}")
+            c2.metric("✅ Inside",   f"{inside_n:,}")
+            c3.metric("🔴 Outside",  f"{outside_n:,}")
+            c4.metric("Zero (0,0)",  f"{len(df_zero):,}")
+            c5.metric("Empty/Null",  f"{len(df_empty):,}")
+            c6.metric("Invalid",     f"{len(df_invalid):,}")
 
-    # ----- validation-only mode (boundary not yet run) -----
+    # ----- validation-only mode (no spatial results yet) -----
     else:
         tab2, tab4, tab5, tab6, tab7 = st.tabs([
             "✅ Valid Coordinates",
@@ -780,3 +842,5 @@ if st.session_state.validation_results:
             c2.metric("0️⃣ Zero (0,0)", f"{len(df_zero):,}")
             c3.metric("📭 Empty/Null",  f"{len(df_empty):,}")
             c4.metric("❌ Invalid",     f"{len(df_invalid):,}")
+
+    _section_end()
